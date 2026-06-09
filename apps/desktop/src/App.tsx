@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, getAdminToken, setAdminToken } from "./api";
+import { api, setAdminToken } from "./api";
 import { ConnectionBadge } from "./components/ConnectionBadge";
 import { notifyWsEvent } from "./notify";
 import { subscribe } from "./ws";
@@ -11,6 +11,7 @@ import { TicketDetail } from "./pages/TicketDetail";
 import { AdminCategories } from "./pages/AdminCategories";
 import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
+import { GlassPageTransition } from "./components/GlassPageTransition";
 import type { Ticket } from "./types";
 
 type EmployeeTab = "create" | "track";
@@ -21,7 +22,6 @@ const APP_VERSION = "0.1.0";
 export default function App() {
   const [mode, setMode] = useState<"employee" | "admin">("employee");
   const [adminAuthed, setAdminAuthed] = useState(false);
-  const [adminChecking, setAdminChecking] = useState(false);
   const [employeeTab, setEmployeeTab] = useState<EmployeeTab>("create");
   const [adminTab, setAdminTab] = useState<AdminTab>("queue");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -53,20 +53,17 @@ export default function App() {
     return () => window.removeEventListener("fixplease-admin-unauthorized", onUnauthorized);
   }, []);
 
-  const openAdminCabinet = async () => {
+  const openAdminCabinet = () => {
+    setAdminToken(null);
+    setAdminAuthed(false);
     setMode("admin");
     setSettingsOpen(false);
-    if (!getAdminToken()) {
-      setAdminAuthed(false);
-      return;
-    }
-    setAdminChecking(true);
-    const ok = await api.validateAdminSession();
-    setAdminAuthed(ok);
-    setAdminChecking(false);
+    setSelectedTicket(null);
   };
 
   const switchToEmployee = () => {
+    setAdminToken(null);
+    setAdminAuthed(false);
     setMode("employee");
     setSettingsOpen(false);
     setSelectedTicket(null);
@@ -84,6 +81,14 @@ export default function App() {
   }
 
   const modeLabel = mode === "employee" ? "Сотрудник" : "Администратор";
+
+  const pageKey = settingsOpen
+    ? `settings-${mode}`
+    : mode === "employee"
+      ? `employee-${employeeTab}`
+      : !adminAuthed
+          ? "admin-login"
+          : `admin-${adminTab}`;
 
   return (
     <div className="app-shell">
@@ -167,7 +172,7 @@ export default function App() {
             </>
           )}
 
-          {mode === "admin" && !adminAuthed && !adminChecking && (
+          {mode === "admin" && !adminAuthed && (
             <button className="btn-ghost" onClick={switchToEmployee}>
               ← Сотрудник
             </button>
@@ -190,72 +195,70 @@ export default function App() {
       </header>
 
       {!serverOk && (
-        <div className="error-banner">
+        <div className="error-banner banner-enter">
           Не удалось подключиться к серверу. Откройте «Настройки» и проверьте адрес сервера.
         </div>
       )}
 
       <main className="app-main">
-        {mode === "employee" && settingsOpen && (
-          <Settings isAdmin={false} onLogout={() => {}} />
-        )}
+        <GlassPageTransition pageKey={pageKey}>
+          {mode === "employee" && settingsOpen && (
+            <Settings isAdmin={false} onLogout={() => {}} />
+          )}
 
-        {mode === "employee" && !settingsOpen && employeeTab === "create" && (
-          <CreateTicket
-            onCreated={() => {
-              setEmployeeTab("track");
-            }}
-          />
-        )}
+          {mode === "employee" && !settingsOpen && employeeTab === "create" && (
+            <CreateTicket
+              onCreated={() => {
+                setEmployeeTab("track");
+              }}
+            />
+          )}
 
-        {mode === "employee" && !settingsOpen && employeeTab === "track" && <TrackTicket />}
+          {mode === "employee" && !settingsOpen && employeeTab === "track" && <TrackTicket />}
 
-        {mode === "admin" && adminChecking && (
-          <div className="card empty">Проверка сессии…</div>
-        )}
+          {mode === "admin" && !adminAuthed && (
+            <AdminLogin onSuccess={() => setAdminAuthed(true)} />
+          )}
 
-        {mode === "admin" && !adminChecking && !adminAuthed && (
-          <AdminLogin onSuccess={() => setAdminAuthed(true)} />
-        )}
+          {mode === "admin" && adminAuthed && settingsOpen && (
+            <Settings
+              isAdmin
+              onLogout={() => {
+                setAdminAuthed(false);
+                setAdminToken(null);
+              }}
+            />
+          )}
 
-        {mode === "admin" && !adminChecking && adminAuthed && settingsOpen && (
-          <Settings
-            isAdmin
-            onLogout={() => {
-              setAdminAuthed(false);
-              setAdminToken(null);
-            }}
-          />
-        )}
-
-        {mode === "admin" && !adminChecking && adminAuthed && !settingsOpen && (
-          <>
-            {adminTab === "queue" && (
-              <div className="admin-workspace">
-                <div className="admin-panel admin-panel-list">
-                  <AdminQueue
-                    selectedId={selectedTicket?.id}
-                    onSelect={setSelectedTicket}
-                  />
+          {mode === "admin" && adminAuthed && !settingsOpen && (
+            <>
+              {adminTab === "queue" && (
+                <div className="admin-workspace">
+                  <div className="admin-panel admin-panel-list">
+                    <AdminQueue
+                      selectedId={selectedTicket?.id}
+                      onSelect={setSelectedTicket}
+                    />
+                  </div>
+                  <div className="admin-panel admin-panel-detail">
+                    <TicketDetail
+                      ticketId={selectedTicket?.id ?? null}
+                      onUpdated={(t) => {
+                        if (t.status === "closed") {
+                          setSelectedTicket(null);
+                        } else {
+                          setSelectedTicket(t);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="admin-panel admin-panel-detail">
-                  <TicketDetail
-                    ticketId={selectedTicket?.id ?? null}
-                    onUpdated={(t) => {
-                      if (t.status === "closed") {
-                        setSelectedTicket(null);
-                      } else {
-                        setSelectedTicket(t);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-            {adminTab === "reference" && <AdminCategories />}
-            {adminTab === "reports" && <Stats />}
-          </>
-        )}
+              )}
+              {adminTab === "reference" && <AdminCategories />}
+              {adminTab === "reports" && <Stats />}
+            </>
+          )}
+        </GlassPageTransition>
       </main>
     </div>
   );
