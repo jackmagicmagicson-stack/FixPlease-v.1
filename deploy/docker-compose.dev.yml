@@ -1,0 +1,5 @@
+# Dev overlay: expose API on 8080 without TLS
+services:
+  api:
+    ports:
+      - "8080:8080"

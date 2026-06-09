@@ -1,0 +1,18 @@
+FROM rust:1.88-bookworm AS builder
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY services/api services/api
+COPY migrations migrations
+# Docker build only needs the API crate (desktop is not copied into the image).
+RUN sed -i 's/members = \[.*\]/members = ["services\/api"]/' Cargo.toml \
+    && cargo build --release -p fixplease-api
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /app/target/release/fixplease-api /usr/local/bin/fixplease-api
+COPY migrations /app/migrations
+ENV ATTACHMENTS_DIR=/data/attachments
+RUN mkdir -p /data/attachments
+EXPOSE 8080
+CMD ["fixplease-api"]

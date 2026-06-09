@@ -1,0 +1,8 @@
+/target/
+**/node_modules/
+**/dist/
+.env
+deploy/nginx/certs/*.pem
+data/
+*.log
+.DS_Store
