@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { PageHeader } from "../components/PageHeader";
 import type { StatsResponse } from "../types";
 
 export function Stats() {
@@ -41,8 +42,11 @@ export function Stats() {
   if (!stats && !error) return <div className="empty">Загрузка...</div>;
 
   return (
-    <div className="card">
-      <h2>Статистика</h2>
+    <div className="card page-card">
+      <PageHeader
+        title="Отчёты"
+        lead="Сводка по заявкам за выбранный период. Для оценки нагрузки и скорости реакции."
+      />
       {error && <div className="error-banner">{error}</div>}
       <div className="toolbar">
         {(["day", "week", "month", "custom"] as const).map((p) => (

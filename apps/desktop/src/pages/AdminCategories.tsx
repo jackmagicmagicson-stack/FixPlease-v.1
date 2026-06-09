@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { FormSection } from "../components/FormSection";
+import { PageHeader } from "../components/PageHeader";
 import type { Category, CategoryTemplate } from "../types";
 
 export function AdminCategories() {
@@ -26,65 +28,102 @@ export function AdminCategories() {
     api.templates(selected).then(setTemplates).catch((e) => setError(String(e)));
   }, [selected]);
 
+  const selectedCategory = categories.find((c) => c.id === selected);
+
   return (
-    <div className="card">
-      <h2>Категории и шаблоны</h2>
+    <div className="card page-card">
+      <PageHeader
+        title="Справочник"
+        lead="Категории проблем и готовые формулировки для сотрудников. Меняется редко."
+      />
       {error && <div className="error-banner">{error}</div>}
-      <div className="toolbar">
-        <input
-          placeholder="Новая категория"
-          value={newCat}
-          onChange={(e) => setNewCat(e.target.value)}
-        />
-        <button
-          className="btn btn-primary"
-          onClick={async () => {
-            await api.createCategory(newCat);
-            setNewCat("");
-            refresh();
-          }}
+
+      <FormSection title="Категории">
+        <div className="toolbar">
+          <input
+            placeholder="Название новой категории"
+            value={newCat}
+            onChange={(e) => setNewCat(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              await api.createCategory(newCat);
+              setNewCat("");
+              refresh();
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+
+        {categories.length > 0 && (
+          <div className="category-picker" role="listbox" aria-label="Категория">
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                role="option"
+                aria-selected={selected === c.id}
+                className={`category-option${selected === c.id ? " selected" : ""}`}
+                onClick={() => setSelected(c.id)}
+              >
+                <span className="category-option-name">{c.name}</span>
+                {c.allows_priority && <span className="badge priority">приоритет</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </FormSection>
+
+      {selectedCategory && (
+        <FormSection
+          title={`Шаблоны: ${selectedCategory.name}`}
+          hint="Сотрудник видит их при создании заявки в этой категории"
         >
-          Добавить
-        </button>
-      </div>
-      <select value={selected} onChange={(e) => setSelected(e.target.value)}>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-      <ul className="ticket-list">
-        {templates.map((t) => (
-          <li key={t.id}>
-            <strong>{t.title}</strong>
-            <p>{t.body}</p>
-            <button
-              className="btn"
-              onClick={async () => {
-                await api.deleteTemplate(t.id);
-                api.templates(selected).then(setTemplates);
-              }}
-            >
-              Удалить
-            </button>
-          </li>
-        ))}
-      </ul>
-      <h4>Новый шаблон</h4>
-      <input value={tplTitle} onChange={(e) => setTplTitle(e.target.value)} placeholder="Заголовок" />
-      <textarea value={tplBody} onChange={(e) => setTplBody(e.target.value)} placeholder="Текст" />
-      <button
-        className="btn btn-primary"
-        onClick={async () => {
-          await api.createTemplate(selected, { title: tplTitle, body: tplBody });
-          setTplTitle("");
-          setTplBody("");
-          api.templates(selected).then(setTemplates);
-        }}
-      >
-        Сохранить шаблон
-      </button>
+          {templates.length === 0 ? (
+            <p className="hint">Шаблонов пока нет — добавьте ниже.</p>
+          ) : (
+            <ul className="template-list">
+              {templates.map((t) => (
+                <li key={t.id} className="template-item">
+                  <strong>{t.title}</strong>
+                  <p>{t.body}</p>
+                  <button
+                    className="btn"
+                    onClick={async () => {
+                      await api.deleteTemplate(t.id);
+                      api.templates(selected).then(setTemplates);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="form-row">
+            <label>Новый шаблон</label>
+            <input value={tplTitle} onChange={(e) => setTplTitle(e.target.value)} placeholder="Краткий заголовок кнопки" />
+          </div>
+          <div className="form-row">
+            <textarea value={tplBody} onChange={(e) => setTplBody(e.target.value)} placeholder="Текст, который подставится в описание" />
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              await api.createTemplate(selected, { title: tplTitle, body: tplBody });
+              setTplTitle("");
+              setTplBody("");
+              api.templates(selected).then(setTemplates);
+            }}
+          >
+            Сохранить шаблон
+          </button>
+        </FormSection>
+      )}
     </div>
   );
 }

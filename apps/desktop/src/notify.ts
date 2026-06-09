@@ -4,6 +4,7 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { ticketStatusLabel } from "./statusLabels";
+import { upsertTicketHistory } from "./ticketHistory";
 import type { WsEvent, Ticket } from "./types";
 
 function inQuietHours(): boolean {
@@ -75,6 +76,7 @@ export async function notifyWsEvent(event: WsEvent, isAdmin: boolean) {
 export function saveLastTicket(ticket: Ticket) {
   localStorage.setItem("last_ticket_id", ticket.id);
   localStorage.setItem("last_ticket_number", String(ticket.public_number));
+  upsertTicketHistory(ticket);
 }
 
 export function getLastTicketId() {

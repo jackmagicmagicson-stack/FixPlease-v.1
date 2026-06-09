@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, setAdminToken } from "../api";
+import { PageHeader } from "../components/PageHeader";
 
 interface Props {
   onSuccess: () => void;
@@ -20,8 +21,11 @@ export function AdminLogin({ onSuccess }: Props) {
   };
 
   return (
-    <div className="card">
-      <h2>Вход в кабинет администратора</h2>
+    <div className="card page-card login-card">
+      <PageHeader
+        title="Кабинет администратора"
+        lead="Вход только для сотрудников техподдержки. После входа откроется очередь заявок."
+      />
       {error && <div className="error-banner">{error}</div>}
       <div className="form-row">
         <label>Пароль</label>
@@ -30,9 +34,10 @@ export function AdminLogin({ onSuccess }: Props) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && login()}
+          autoFocus
         />
       </div>
-      <button className="btn btn-primary" onClick={login}>
+      <button className="btn btn-primary btn-lg" onClick={login}>
         Войти
       </button>
     </div>

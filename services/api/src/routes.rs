@@ -207,7 +207,7 @@ async fn purge_closed_handler(
     AdminAuth(claims): AdminAuth,
     Json(req): Json<PurgeClosedRequest>,
 ) -> ApiResult<Json<PurgeClosedResponse>> {
-    let mine_only = req.mine_only.unwrap_or(true);
+    let mine_only = req.mine_only.unwrap_or(false);
     let deleted = purge_closed_tickets(&state.db, claims.sub, mine_only).await?;
     Ok(Json(PurgeClosedResponse { deleted }))
 }

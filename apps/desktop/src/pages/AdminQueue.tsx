@@ -7,8 +7,10 @@ import {
   SORT_OPTIONS,
   type TicketSortMode,
 } from "../importance";
+import { ConfirmAction } from "../components/ConfirmAction";
+import { PageHeader } from "../components/PageHeader";
 import { ticketStatusLabel } from "../statusLabels";
-import { TICKETS_CHANGED } from "../ticketEvents";
+import { notifyTicketsChanged, TICKETS_CHANGED } from "../ticketEvents";
 import type { Category, Ticket, TicketStatus } from "../types";
 
 interface Props {
@@ -99,30 +101,34 @@ export function AdminQueue({ onSelect, selectedId }: Props) {
     });
   }, [refresh, selectedId, onSelect]);
 
-  const purgeClosed = async (mineOnly: boolean) => {
-    const label = mineOnly
-      ? "Удалить из истории все закрытые заявки, которые вы обрабатывали?"
-      : "Удалить из истории ВСЕ закрытые заявки в системе?";
-    if (!window.confirm(`${label}\n\nДействие необратимо.`)) return;
+  const clearHistory = async () => {
     setPurgeMsg("");
     setError("");
     try {
-      const res = await api.purgeClosed(mineOnly);
-      setPurgeMsg(`Удалено заявок: ${res.deleted}`);
+      const res = await api.purgeClosed(false);
+      setPurgeMsg(res.deleted > 0 ? `Удалено заявок: ${res.deleted}` : "Нет закрытых заявок для удаления");
       onSelect(null);
-      refresh();
+      setTickets([]);
+      await refresh();
+      notifyTicketsChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
   return (
-    <div className="card">
-      <h2>Очередь заявок</h2>
+    <div className="card panel-card">
+      <PageHeader
+        title="Очередь"
+        lead="Выберите заявку → смените статус → закройте. Закрытые — в фильтре «Закрытые»."
+      />
       {error && <div className="error-banner">{error}</div>}
       {purgeMsg && <div className="success-banner">{purgeMsg}</div>}
-      <div className="toolbar">
-        <select
+
+      <div className="filter-bar">
+        <label className="filter-field">
+          <span className="filter-label">Статус</span>
+          <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
         >
@@ -133,7 +139,10 @@ export function AdminQueue({ onSelect, selectedId }: Props) {
           <option value="resolved">Решённые</option>
           <option value="closed">Закрытые</option>
         </select>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        </label>
+        <label className="filter-field">
+          <span className="filter-label">Категория</span>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">Все категории</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
@@ -141,7 +150,10 @@ export function AdminQueue({ onSelect, selectedId }: Props) {
             </option>
           ))}
         </select>
-        <select
+        </label>
+        <label className="filter-field">
+          <span className="filter-label">Сортировка</span>
+          <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as TicketSortMode)}
           title="Сортировка очереди"
@@ -152,34 +164,11 @@ export function AdminQueue({ onSelect, selectedId }: Props) {
             </option>
           ))}
         </select>
+        </label>
         <button className="btn" onClick={refresh}>
           Обновить
         </button>
       </div>
-      <div className="toolbar purge-toolbar">
-        <button
-          type="button"
-          className="btn"
-          onClick={() => purgeClosed(true)}
-          title="Удаляет ваши закрытые заявки из базы"
-        >
-          Очистить мои закрытые
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => purgeClosed(false)}
-          title="Удаляет все закрытые заявки из базы"
-        >
-          Очистить все закрытые
-        </button>
-      </div>
-      {sortMode === "importance" && statusFilter === "active" && (
-        <p className="hint importance-hint">
-          Иерархия: критичная (эскалация + приоритет) → эскалация → приоритет (Интернет) →
-          обычная; внутри уровня — дольше ждут выше.
-        </p>
-      )}
       {tickets.length === 0 ? (
         <div className="empty">
           {statusFilter === "active"
@@ -209,6 +198,16 @@ export function AdminQueue({ onSelect, selectedId }: Props) {
             </li>
           ))}
         </ul>
+      )}
+
+      {statusFilter === "closed" && (
+        <section className="maintenance-section">
+          <ConfirmAction
+            label="Очистить историю"
+            confirmText="Все закрытые заявки будут удалены из системы. Это действие необратимо."
+            onConfirm={clearHistory}
+          />
+        </section>
       )}
     </div>
   );

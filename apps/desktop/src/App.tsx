@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getAdminToken, setAdminToken } from "./api";
+import { ConnectionBadge } from "./components/ConnectionBadge";
 import { notifyWsEvent } from "./notify";
 import { subscribe } from "./ws";
 import { CreateTicket } from "./pages/CreateTicket";
@@ -12,8 +13,8 @@ import { Stats } from "./pages/Stats";
 import { Settings } from "./pages/Settings";
 import type { Ticket } from "./types";
 
-type EmployeeTab = "create" | "track" | "settings";
-type AdminTab = "queue" | "categories" | "stats" | "settings";
+type EmployeeTab = "create" | "track";
+type AdminTab = "queue" | "reference" | "reports";
 
 const APP_VERSION = "0.1.0";
 
@@ -23,6 +24,7 @@ export default function App() {
   const [adminChecking, setAdminChecking] = useState(false);
   const [employeeTab, setEmployeeTab] = useState<EmployeeTab>("create");
   const [adminTab, setAdminTab] = useState<AdminTab>("queue");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [versionBlocked, setVersionBlocked] = useState(false);
   const [serverOk, setServerOk] = useState(true);
@@ -53,6 +55,7 @@ export default function App() {
 
   const openAdminCabinet = async () => {
     setMode("admin");
+    setSettingsOpen(false);
     if (!getAdminToken()) {
       setAdminAuthed(false);
       return;
@@ -61,6 +64,12 @@ export default function App() {
     const ok = await api.validateAdminSession();
     setAdminAuthed(ok);
     setAdminChecking(false);
+  };
+
+  const switchToEmployee = () => {
+    setMode("employee");
+    setSettingsOpen(false);
+    setSelectedTicket(null);
   };
 
   if (versionBlocked) {
@@ -74,67 +83,106 @@ export default function App() {
     );
   }
 
+  const modeLabel = mode === "employee" ? "Сотрудник" : "Администратор";
+
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>FixPlease</h1>
-        <nav className="tabs">
-          {mode === "employee" ? (
+        <div className="app-brand">
+          <h1>FixPlease</h1>
+          <span className="mode-badge">{modeLabel}</span>
+          <ConnectionBadge ok={serverOk} />
+        </div>
+
+        <nav className="nav-primary" aria-label="Основные разделы">
+          {mode === "employee" && (
             <>
               <button
-                className={employeeTab === "create" ? "active" : ""}
-                onClick={() => setEmployeeTab("create")}
+                className={employeeTab === "create" && !settingsOpen ? "active" : ""}
+                onClick={() => {
+                  setEmployeeTab("create");
+                  setSettingsOpen(false);
+                }}
               >
-                Создать
+                Новая заявка
               </button>
               <button
-                className={employeeTab === "track" ? "active" : ""}
-                onClick={() => setEmployeeTab("track")}
+                className={employeeTab === "track" && !settingsOpen ? "active" : ""}
+                onClick={() => {
+                  setEmployeeTab("track");
+                  setSettingsOpen(false);
+                }}
               >
-                Статус
-              </button>
-              <button
-                className={employeeTab === "settings" ? "active" : ""}
-                onClick={() => setEmployeeTab("settings")}
-              >
-                Настройки
-              </button>
-              <button className="btn" onClick={openAdminCabinet}>
-                Кабинет админа
+                Мои заявки
               </button>
             </>
-          ) : !adminAuthed ? (
-            <button className="btn" onClick={() => setMode("employee")}>
-              Назад
-            </button>
-          ) : (
+          )}
+
+          {mode === "admin" && adminAuthed && (
             <>
               <button
-                className={adminTab === "queue" ? "active" : ""}
-                onClick={() => setAdminTab("queue")}
+                className={adminTab === "queue" && !settingsOpen ? "active" : ""}
+                onClick={() => {
+                  setAdminTab("queue");
+                  setSettingsOpen(false);
+                }}
               >
                 Очередь
               </button>
               <button
-                className={adminTab === "categories" ? "active" : ""}
-                onClick={() => setAdminTab("categories")}
+                className={adminTab === "reference" && !settingsOpen ? "active" : ""}
+                onClick={() => {
+                  setAdminTab("reference");
+                  setSettingsOpen(false);
+                  setSelectedTicket(null);
+                }}
               >
-                Категории
+                Справочник
               </button>
               <button
-                className={adminTab === "stats" ? "active" : ""}
-                onClick={() => setAdminTab("stats")}
+                className={adminTab === "reports" && !settingsOpen ? "active" : ""}
+                onClick={() => {
+                  setAdminTab("reports");
+                  setSettingsOpen(false);
+                }}
               >
-                Статистика
+                Отчёты
               </button>
+            </>
+          )}
+        </nav>
+
+        <nav className="nav-secondary" aria-label="Дополнительно">
+          {mode === "employee" && (
+            <>
               <button
-                className={adminTab === "settings" ? "active" : ""}
-                onClick={() => setAdminTab("settings")}
+                className={settingsOpen ? "active" : ""}
+                onClick={() => setSettingsOpen(true)}
               >
                 Настройки
               </button>
-              <button className="btn" onClick={() => setMode("employee")}>
-                Режим сотрудника
+              <button className="btn-ghost" onClick={openAdminCabinet}>
+                Админ
+              </button>
+            </>
+          )}
+
+          {mode === "admin" && !adminAuthed && !adminChecking && (
+            <button className="btn-ghost" onClick={switchToEmployee}>
+              ← Сотрудник
+            </button>
+          )}
+
+          {mode === "admin" && adminAuthed && (
+            <>
+              <button
+                className={settingsOpen ? "active" : ""}
+                onClick={() => setSettingsOpen(true)}
+              >
+                Настройки
+              </button>
+              <button className="btn-ghost" onClick={switchToEmployee}>
+                Сотрудник
               </button>
             </>
           )}
@@ -143,63 +191,72 @@ export default function App() {
 
       {!serverOk && (
         <div className="error-banner">
-          Не удалось подключиться к серверу. Проверьте URL в настройках.
+          Не удалось подключиться к серверу. Откройте «Настройки» и проверьте адрес сервера.
         </div>
       )}
 
-      {mode === "employee" && (
-        <>
-          {employeeTab === "create" && (
-            <CreateTicket onCreated={() => setEmployeeTab("track")} />
-          )}
-          {employeeTab === "track" && <TrackTicket />}
-          {employeeTab === "settings" && (
-            <Settings isAdmin={false} onLogout={() => {}} />
-          )}
-        </>
-      )}
+      <main className="app-main">
+        {mode === "employee" && settingsOpen && (
+          <Settings isAdmin={false} onLogout={() => {}} />
+        )}
 
-      {mode === "admin" && adminChecking && (
-        <div className="card empty">Проверка сессии...</div>
-      )}
+        {mode === "employee" && !settingsOpen && employeeTab === "create" && (
+          <CreateTicket
+            onCreated={() => {
+              setEmployeeTab("track");
+            }}
+          />
+        )}
 
-      {mode === "admin" && !adminChecking && !adminAuthed && (
-        <AdminLogin onSuccess={() => setAdminAuthed(true)} />
-      )}
+        {mode === "employee" && !settingsOpen && employeeTab === "track" && <TrackTicket />}
 
-      {mode === "admin" && !adminChecking && adminAuthed && (
-        <>
-          {adminTab === "queue" && (
-            <>
-              <AdminQueue
-                selectedId={selectedTicket?.id}
-                onSelect={setSelectedTicket}
-              />
-              <TicketDetail
-                ticketId={selectedTicket?.id ?? null}
-                onUpdated={(t) => {
-                  if (t.status === "closed") {
-                    setSelectedTicket(null);
-                  } else {
-                    setSelectedTicket(t);
-                  }
-                }}
-              />
-            </>
-          )}
-          {adminTab === "categories" && <AdminCategories />}
-          {adminTab === "stats" && <Stats />}
-          {adminTab === "settings" && (
-            <Settings
-              isAdmin
-              onLogout={() => {
-                setAdminAuthed(false);
-                setAdminToken(null);
-              }}
-            />
-          )}
-        </>
-      )}
+        {mode === "admin" && adminChecking && (
+          <div className="card empty">Проверка сессии…</div>
+        )}
+
+        {mode === "admin" && !adminChecking && !adminAuthed && (
+          <AdminLogin onSuccess={() => setAdminAuthed(true)} />
+        )}
+
+        {mode === "admin" && !adminChecking && adminAuthed && settingsOpen && (
+          <Settings
+            isAdmin
+            onLogout={() => {
+              setAdminAuthed(false);
+              setAdminToken(null);
+            }}
+          />
+        )}
+
+        {mode === "admin" && !adminChecking && adminAuthed && !settingsOpen && (
+          <>
+            {adminTab === "queue" && (
+              <div className="admin-workspace">
+                <div className="admin-panel admin-panel-list">
+                  <AdminQueue
+                    selectedId={selectedTicket?.id}
+                    onSelect={setSelectedTicket}
+                  />
+                </div>
+                <div className="admin-panel admin-panel-detail">
+                  <TicketDetail
+                    ticketId={selectedTicket?.id ?? null}
+                    onUpdated={(t) => {
+                      if (t.status === "closed") {
+                        setSelectedTicket(null);
+                      } else {
+                        setSelectedTicket(t);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {adminTab === "reference" && <AdminCategories />}
+            {adminTab === "reports" && <Stats />}
+          </>
+        )}
+      </main>
     </div>
   );
 }
