@@ -69,16 +69,34 @@ export default function App() {
   const [updateLoading, setUpdateLoading] = useState(false);
 
   useEffect(() => {
-    api
-      .version()
-      .then((v) => {
-        if (compareSemver(__APP_VERSION__, v.min_client_version) < 0) {
-          setVersionBlocked(true);
-        }
-      })
-      .catch(() => setServerOk(false));
+    let cancelled = false;
 
-    api.health().catch(() => setServerOk(false));
+    const refreshConnection = () => {
+      api
+        .version()
+        .then((v) => {
+          if (cancelled) return;
+          if (compareSemver(__APP_VERSION__, v.min_client_version) < 0) {
+            setVersionBlocked(true);
+          }
+          setServerOk(true);
+        })
+        .catch(() => {
+          if (!cancelled) setServerOk(false);
+        });
+
+      api.health().catch(() => {
+        if (!cancelled) setServerOk(false);
+      });
+    };
+
+    refreshConnection();
+    const onUrlChange = () => refreshConnection();
+    window.addEventListener("fixplease-server-url-changed", onUrlChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("fixplease-server-url-changed", onUrlChange);
+    };
   }, []);
 
   useEffect(() => {

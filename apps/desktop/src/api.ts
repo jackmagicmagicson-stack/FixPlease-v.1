@@ -6,6 +6,7 @@ import type {
   Ticket,
   TicketMessage,
 } from "./types";
+import { appFetch } from "./httpFetch";
 import { disconnectWs } from "./ws";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:8080";
@@ -63,7 +64,7 @@ async function request<T>(
   }
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}${path}`, { ...options, headers });
+    res = await appFetch(`${baseUrl}${path}`, { ...options, headers });
   } catch (e) {
     console.error("network error", e);
     throw new Error("Ошибка сети. Проверьте подключение к серверу.");
@@ -84,8 +85,8 @@ async function request<T>(
 
 export const api = {
   health: async () => {
-    const res = await fetch(`${baseUrl}/health`);
-    if (!res.ok) throw new Error("server unreachable");
+    const res = await appFetch(`${baseUrl}/health`);
+    if (!res.ok) throw new Error(`server unreachable (${res.status})`);
     return res.text();
   },
   version: () =>

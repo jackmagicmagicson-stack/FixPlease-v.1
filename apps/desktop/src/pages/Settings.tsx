@@ -29,7 +29,6 @@ export function Settings({ isAdmin, onLogout }: Props) {
   const [msg, setMsg] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [updateLoading, setUpdateLoading] = useState(false);
-
   useEffect(() => {
     setUrl(getServerUrl());
     const loc = getLastLocation();
