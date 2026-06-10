@@ -6,6 +6,7 @@ import type {
   Ticket,
   TicketMessage,
 } from "./types";
+import { disconnectWs } from "./ws";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:8080";
 
@@ -23,6 +24,7 @@ let adminToken: string | null = localStorage.getItem("admin_token");
 export function setServerUrl(url: string) {
   const next = url.replace(/\/$/, "");
   if (next !== baseUrl) {
+    disconnectWs();
     setAdminToken(null);
   }
   baseUrl = next;
@@ -140,7 +142,7 @@ export const api = {
   createTicket: (data: {
     row_label: string;
     desk_label: string;
-    category_id: string;
+    category_id?: string;
     description: string;
     save_as_draft?: boolean;
   }) =>
@@ -210,6 +212,9 @@ export const api = {
       quiet_hours_end: string | null;
       min_client_version: string;
       retention_days: number;
+      client_update_version: string | null;
+      client_update_url: string | null;
+      client_update_signature: string | null;
     }>("/v1/settings"),
   updateSettings: (data: Record<string, unknown>) =>
     request("/v1/settings", {

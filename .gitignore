@@ -3,6 +3,8 @@
 **/dist/
 .env
 deploy/nginx/certs/*.pem
+deploy/fixplease.key
+deploy/fixplease.key.pub
 data/
 *.log
 .DS_Store

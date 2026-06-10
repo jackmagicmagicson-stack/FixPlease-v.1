@@ -1,11 +1,11 @@
 //! Integration test: ticket submit notifies via WebSocket within 1 second.
 
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 use serde_json::json;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 #[tokio::test]
-#[ignore = "requires running API and DB: DATABASE_URL=... cargo test --test ws_delivery -- --ignored"]
+#[ignore = "requires running API: run in CI after starting server"]
 async fn ticket_created_within_one_second() {
     let base = std::env::var("TEST_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
     let ws_url = base.replace("http://", "ws://").replace("https://", "wss://") + "/v1/ws";

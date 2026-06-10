@@ -130,8 +130,22 @@ pub async fn create_ticket(
     if req.row_label.trim().is_empty() || req.desk_label.trim().is_empty() {
         return Err(ApiError::BadRequest("row and desk are required".into()));
     }
-    let is_priority = category_allows_priority(pool, req.category_id).await?;
-    let status = if req.save_as_draft.unwrap_or(false) {
+    let is_draft = req.save_as_draft.unwrap_or(false);
+    let category_id = match req.category_id {
+        Some(id) => id,
+        None if is_draft => {
+            let row: Option<(Uuid,)> =
+                sqlx::query_as("SELECT id FROM categories ORDER BY sort_order, name LIMIT 1")
+                    .fetch_optional(pool)
+                    .await?;
+            row.map(|r| r.0).ok_or_else(|| {
+                ApiError::BadRequest("no categories configured".into())
+            })?
+        }
+        None => return Err(ApiError::BadRequest("category is required".into())),
+    };
+    let is_priority = category_allows_priority(pool, category_id).await?;
+    let status = if is_draft {
         TicketStatus::Draft
     } else {
         TicketStatus::New
@@ -152,7 +166,7 @@ pub async fn create_ticket(
     )
     .bind(req.row_label.trim())
     .bind(req.desk_label.trim())
-    .bind(req.category_id)
+    .bind(category_id)
     .bind(req.description)
     .bind(&status)
     .bind(is_priority)

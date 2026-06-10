@@ -20,9 +20,10 @@ services:
     environment:
       DATABASE_URL: postgres://fixplease:fixplease@db:5432/fixplease
       BIND_ADDR: 0.0.0.0:8080
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in deploy/.env}
       ATTACHMENTS_DIR: /data/attachments
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD must be set in deploy/.env}
+      FIXPLEASE_STRICT_CONFIG: "1"
     volumes:
       - attachments:/data/attachments
     depends_on:

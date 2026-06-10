@@ -8,6 +8,7 @@ import {
   hasSavedLocation,
   saveLastLocation,
 } from "../locationMemory";
+import { checkForUpdates } from "../updater";
 
 interface Props {
   isAdmin: boolean;
@@ -18,6 +19,16 @@ export function Settings({ isAdmin, onLogout }: Props) {
   const [url, setUrl] = useState(getServerUrl());
   const [row, setRow] = useState("");
   const [desk, setDesk] = useState("");
+  const [quietStart, setQuietStart] = useState(localStorage.getItem("quiet_start") || "");
+  const [quietEnd, setQuietEnd] = useState(localStorage.getItem("quiet_end") || "");
+  const [escalation, setEscalation] = useState(15);
+  const [minClientVersion, setMinClientVersion] = useState("0.1.0");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateUrl, setUpdateUrl] = useState("");
+  const [updateSignature, setUpdateSignature] = useState("");
+  const [msg, setMsg] = useState("");
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   useEffect(() => {
     setUrl(getServerUrl());
@@ -26,10 +37,19 @@ export function Settings({ isAdmin, onLogout }: Props) {
     setDesk(loc.desk);
   }, []);
 
-  const [quietStart, setQuietStart] = useState(localStorage.getItem("quiet_start") || "");
-  const [quietEnd, setQuietEnd] = useState(localStorage.getItem("quiet_end") || "");
-  const [escalation, setEscalation] = useState(15);
-  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (!isAdmin) return;
+    api
+      .settings()
+      .then((s) => {
+        setEscalation(s.escalation_minutes);
+        setMinClientVersion(s.min_client_version);
+        setUpdateVersion(s.client_update_version || "");
+        setUpdateUrl(s.client_update_url || "");
+        setUpdateSignature(s.client_update_signature || "");
+      })
+      .catch(() => {});
+  }, [isAdmin]);
 
   const save = async () => {
     setServerUrl(url);
@@ -39,11 +59,26 @@ export function Settings({ isAdmin, onLogout }: Props) {
     if (isAdmin) {
       await api.updateSettings({
         escalation_minutes: escalation,
-        quiet_hours_start: quietStart || null,
-        quiet_hours_end: quietEnd || null,
+        min_client_version: minClientVersion,
+        client_update_version: updateVersion || null,
+        client_update_url: updateUrl || null,
+        client_update_signature: updateSignature || null,
       });
     }
     setMsg("Сохранено");
+  };
+
+  const runUpdateCheck = async () => {
+    setUpdateMsg("");
+    setUpdateLoading(true);
+    try {
+      const result = await checkForUpdates();
+      setUpdateMsg(result);
+    } catch (e) {
+      setUpdateMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUpdateLoading(false);
+    }
   };
 
   return (
@@ -53,14 +88,15 @@ export function Settings({ isAdmin, onLogout }: Props) {
         lead={
           isAdmin
             ? "Подключение к серверу и параметры работы системы."
-            : "Обычно всё уже настроено IT-отделом при установке программы."
+            : "Подключение к серверу и личные параметры."
         }
       />
       {msg && <div className="success-banner">{msg}</div>}
+      {updateMsg && <div className="info-banner">{updateMsg}</div>}
 
       <FormSection
         title="Подключение к серверу"
-        hint={isAdmin ? undefined : "Меняйте только по указанию IT-отдела"}
+        hint="Например https://192.168.1.50 или http://127.0.0.1:8080 для разработки"
       >
         <div className="form-row">
           <label>Адрес сервера</label>
@@ -68,12 +104,7 @@ export function Settings({ isAdmin, onLogout }: Props) {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="http://127.0.0.1:8080"
-            readOnly={!isAdmin}
-            className={!isAdmin ? "input-readonly" : undefined}
           />
-          {!isAdmin && (
-            <p className="hint">Адрес задаётся один раз при установке на всех компьютерах офиса.</p>
-          )}
         </div>
       </FormSection>
 
@@ -121,17 +152,67 @@ export function Settings({ isAdmin, onLogout }: Props) {
         </div>
       </FormSection>
 
+      <FormSection title="Обновления приложения">
+        <p className="hint">
+          Проверка загружает манифест с сервера. Версия клиента: {__APP_VERSION__}
+        </p>
+        <button type="button" className="btn btn-primary" onClick={runUpdateCheck} disabled={updateLoading}>
+          {updateLoading ? "Проверка…" : "Проверить обновления"}
+        </button>
+      </FormSection>
+
       {isAdmin && (
-        <FormSection title="Параметры очереди" hint="Влияют на всех администраторов">
-          <div className="form-row">
-            <label>Эскалация (минут без ответа)</label>
-            <input
-              type="number"
-              value={escalation}
-              onChange={(e) => setEscalation(parseInt(e.target.value, 10))}
-            />
-          </div>
-        </FormSection>
+        <>
+          <FormSection title="Параметры очереди" hint="Влияют на всех администраторов">
+            <div className="form-row">
+              <label>Эскалация (минут без ответа)</label>
+              <input
+                type="number"
+                value={escalation}
+                onChange={(e) => setEscalation(parseInt(e.target.value, 10))}
+              />
+            </div>
+            <div className="form-row">
+              <label>Минимальная версия клиента</label>
+              <input
+                value={minClientVersion}
+                onChange={(e) => setMinClientVersion(e.target.value)}
+                placeholder="0.1.0"
+              />
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Манифест обновления клиента"
+            hint="После сборки релиза укажите версию, URL установщика и подпись из .sig файла"
+          >
+            <div className="form-row">
+              <label>Версия обновления</label>
+              <input
+                value={updateVersion}
+                onChange={(e) => setUpdateVersion(e.target.value)}
+                placeholder="0.2.0"
+              />
+            </div>
+            <div className="form-row">
+              <label>URL установщика</label>
+              <input
+                value={updateUrl}
+                onChange={(e) => setUpdateUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="form-row">
+              <label>Подпись (.sig)</label>
+              <textarea
+                value={updateSignature}
+                onChange={(e) => setUpdateSignature(e.target.value)}
+                placeholder="Содержимое файла подписи"
+                rows={4}
+              />
+            </div>
+          </FormSection>
+        </>
       )}
 
       <div className="action-bar action-bar-primary">

@@ -28,6 +28,8 @@ export function TrackTicket() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [searchNumber, setSearchNumber] = useState("");
+  const [searchError, setSearchError] = useState("");
 
   const refreshHistory = () => setHistoryVersion((v) => v + 1);
 
@@ -127,12 +129,52 @@ export function TrackTicket() {
     await loadTicket(ticket.id);
   };
 
+  const searchByNumber = async () => {
+    const num = parseInt(searchNumber.trim(), 10);
+    if (!Number.isFinite(num) || num <= 0) {
+      setSearchError("Введите корректный номер заявки");
+      return;
+    }
+    setSearchError("");
+    setLoading(true);
+    try {
+      const t = await api.ticketByNumber(num);
+      upsertTicketHistory(t);
+      saveLastTicket(t);
+      setTab(t.status === "closed" ? "history" : "active");
+      setSelectedHistoryId(t.status === "closed" ? t.id : null);
+      await loadTicket(t.id);
+    } catch {
+      setSearchError("Заявка не найдена");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="card page-card page-card-wide">
       <PageHeader
         title="Мои заявки"
         lead="Активная заявка обновляется сама. История — закрытые обращения с этого компьютера."
       />
+
+      <div className="form-row" style={{ marginBottom: "1rem" }}>
+        <label>Найти по номеру</label>
+        <div className="toolbar">
+          <input
+            type="number"
+            min={1}
+            value={searchNumber}
+            onChange={(e) => setSearchNumber(e.target.value)}
+            placeholder="Например: 42"
+            onKeyDown={(e) => e.key === "Enter" && searchByNumber()}
+          />
+          <button type="button" className="btn btn-primary" onClick={searchByNumber} disabled={loading}>
+            Найти
+          </button>
+        </div>
+        {searchError && <p className="hint error-text">{searchError}</p>}
+      </div>
 
       <nav className="sub-tabs" aria-label="Раздел заявок">
         <button
