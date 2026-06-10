@@ -20,8 +20,32 @@ function readServerUrl(): string {
 let baseUrl = readServerUrl();
 let adminToken: string | null = localStorage.getItem("admin_token");
 
+export function normalizeServerUrl(url: string): string {
+  return url.trim().replace(/\/$/, "");
+}
+
+export function isValidServerUrl(url: string): boolean {
+  try {
+    const parsed = new URL(normalizeServerUrl(url));
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export async function checkServerAt(url: string): Promise<boolean> {
+  const target = normalizeServerUrl(url);
+  if (!isValidServerUrl(target)) return false;
+  try {
+    const res = await fetch(`${target}/health`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function setServerUrl(url: string) {
-  const next = url.replace(/\/$/, "");
+  const next = normalizeServerUrl(url);
   if (next !== baseUrl) {
     setAdminToken(null);
   }

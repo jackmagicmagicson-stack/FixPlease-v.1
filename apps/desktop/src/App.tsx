@@ -68,16 +68,23 @@ export default function App() {
   const [queueCount, setQueueCount] = useState<number | null>(null);
 
   useEffect(() => {
-    api
-      .version()
-      .then((v) => {
-        if (compareSemver(APP_VERSION, v.min_client_version) < 0) {
-          setVersionBlocked(true);
-        }
-      })
-      .catch(() => setServerOk(false));
+    const checkServer = () => {
+      api
+        .version()
+        .then((v) => {
+          if (compareSemver(APP_VERSION, v.min_client_version) < 0) {
+            setVersionBlocked(true);
+          }
+          setServerOk(true);
+        })
+        .catch(() => setServerOk(false));
 
-    api.health().catch(() => setServerOk(false));
+      api.health().then(() => setServerOk(true)).catch(() => setServerOk(false));
+    };
+
+    checkServer();
+    window.addEventListener("fixplease-server-url-changed", checkServer);
+    return () => window.removeEventListener("fixplease-server-url-changed", checkServer);
   }, []);
 
   useEffect(() => {
@@ -260,7 +267,7 @@ export default function App() {
       <main className="app-main">
         <GlassPageTransition pageKey={pageKey}>
           {mode === "employee" && settingsOpen && (
-            <Settings isAdmin={false} onLogout={() => {}} />
+            <Settings isAdmin={false} onLogout={() => {}} onServerSaved={setServerOk} />
           )}
 
           {mode === "employee" && !settingsOpen && employeeTab === "create" && (
@@ -280,6 +287,7 @@ export default function App() {
           {mode === "admin" && adminAuthed && settingsOpen && (
             <Settings
               isAdmin
+              onServerSaved={setServerOk}
               onLogout={() => {
                 setAdminAuthed(false);
                 setAdminToken(null);

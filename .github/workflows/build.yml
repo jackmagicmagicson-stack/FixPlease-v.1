@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   api:
     runs-on: ubuntu-latest
@@ -41,9 +44,25 @@ jobs:
         working-directory: apps/desktop
       - run: npm run build
         working-directory: apps/desktop
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build Windows installer (PR — no release)
+        if: github.event_name == 'pull_request'
+        run: npm run tauri build -- --target x86_64-pc-windows-msvc
+        working-directory: apps/desktop
+      - name: Build and publish release
+        if: github.event_name == 'push'
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
+          tagName: app-v__VERSION__
+          releaseName: FixPlease v__VERSION__
+          releaseBody: |
+            Windows-установщик FixPlease.
+
+            1. Скачайте `.msi` или `.exe` (NSIS) из assets ниже.
+            2. Установите на рабочие места.
+            3. В **Настройках** (кабинет администратора) укажите адрес сервера: `https://<IP-сервера-в-LAN>`.
+          releaseDraft: true
+          prerelease: false
           args: --target x86_64-pc-windows-msvc

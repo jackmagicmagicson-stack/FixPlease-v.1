@@ -1400,6 +1400,14 @@ textarea {
 
 .action-bar-primary { margin-bottom: 0.5rem; }
 
+.settings-server-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
 .action-bar-secondary {
   margin-top: 0.75rem;
   padding-top: 0.75rem;

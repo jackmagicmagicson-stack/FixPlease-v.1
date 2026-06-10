@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { api, getServerUrl, setServerUrl } from "../api";
+import {
+  api,
+  checkServerAt,
+  getServerUrl,
+  isValidServerUrl,
+  normalizeServerUrl,
+  setServerUrl,
+} from "../api";
 import { FormSection } from "../components/FormSection";
 import { PageHeader } from "../components/PageHeader";
 import {
@@ -12,12 +19,16 @@ import {
 interface Props {
   isAdmin: boolean;
   onLogout: () => void;
+  onServerSaved?: (ok: boolean) => void;
 }
 
-export function Settings({ isAdmin, onLogout }: Props) {
+export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
   const [url, setUrl] = useState(getServerUrl());
   const [row, setRow] = useState("");
   const [desk, setDesk] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [serverTesting, setServerTesting] = useState(false);
+  const [serverTestOk, setServerTestOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     setUrl(getServerUrl());
@@ -31,18 +42,86 @@ export function Settings({ isAdmin, onLogout }: Props) {
   const [escalation, setEscalation] = useState(15);
   const [msg, setMsg] = useState("");
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    api
+      .settings()
+      .then((s) => setEscalation(s.escalation_minutes))
+      .catch(() => {});
+  }, [isAdmin]);
+
+  const testServer = async () => {
+    setServerError("");
+    setServerTestOk(null);
+    if (!isValidServerUrl(url)) {
+      setServerError("Укажите корректный адрес: http:// или https://");
+      return;
+    }
+    setServerTesting(true);
+    try {
+      const ok = await checkServerAt(url);
+      setServerTestOk(ok);
+      if (!ok) {
+        setServerError("Сервер не отвечает. Проверьте адрес и что сервер запущен.");
+      }
+    } finally {
+      setServerTesting(false);
+    }
+  };
+
   const save = async () => {
-    setServerUrl(url);
+    setMsg("");
+    setServerError("");
+
+    const normalized = normalizeServerUrl(url);
+    const serverChanged = isAdmin && normalized !== getServerUrl();
+
+    if (isAdmin && !isValidServerUrl(url)) {
+      setServerError("Укажите корректный адрес: http:// или https://");
+      return;
+    }
+
     saveLastLocation(row, desk);
     localStorage.setItem("quiet_start", quietStart);
     localStorage.setItem("quiet_end", quietEnd);
+
     if (isAdmin) {
-      await api.updateSettings({
-        escalation_minutes: escalation,
-        quiet_hours_start: quietStart || null,
-        quiet_hours_end: quietEnd || null,
-      });
+      try {
+        await api.updateSettings({
+          escalation_minutes: escalation,
+          quiet_hours_start: quietStart || null,
+          quiet_hours_end: quietEnd || null,
+        });
+      } catch (e) {
+        setServerError(e instanceof Error ? e.message : String(e));
+        onServerSaved?.(false);
+        return;
+      }
     }
+
+    if (serverChanged) {
+      const ok = await checkServerAt(normalized);
+      if (!ok) {
+        setServerError(
+          "Новый сервер недоступен. Проверьте адрес или нажмите «Проверить подключение».",
+        );
+        onServerSaved?.(false);
+        return;
+      }
+      setServerUrl(normalized);
+      setUrl(normalized);
+      onServerSaved?.(true);
+      setMsg("Адрес сервера сохранён. Войдите в кабинет снова.");
+      onLogout();
+      return;
+    }
+
+    if (isAdmin) {
+      setServerUrl(normalized);
+    }
+
+    const ok = await checkServerAt(getServerUrl());
+    onServerSaved?.(ok);
     setMsg("Сохранено");
   };
 
@@ -57,22 +136,53 @@ export function Settings({ isAdmin, onLogout }: Props) {
         }
       />
       {msg && <div className="success-banner">{msg}</div>}
+      {serverError && <div className="error-banner">{serverError}</div>}
+      {serverTestOk === true && !serverError && (
+        <div className="success-banner">Сервер доступен.</div>
+      )}
 
       <FormSection
         title="Подключение к серверу"
-        hint={isAdmin ? undefined : "Меняйте только по указанию IT-отдела"}
+        hint={
+          isAdmin
+            ? "После переноса или обновления сервера укажите новый адрес (например https://192.168.1.50). Доступно только администратору."
+            : "Меняйте только по указанию IT-отдела"
+        }
       >
         <div className="form-row">
           <label>Адрес сервера</label>
           <input
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="http://127.0.0.1:8080"
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setServerTestOk(null);
+              setServerError("");
+            }}
+            placeholder={isAdmin ? "https://192.168.1.50" : "http://127.0.0.1:8080"}
             readOnly={!isAdmin}
             className={!isAdmin ? "input-readonly" : undefined}
           />
-          {!isAdmin && (
-            <p className="hint">Адрес задаётся один раз при установке на всех компьютерах офиса.</p>
+          {isAdmin ? (
+            <div className="settings-server-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void testServer()}
+                disabled={serverTesting || !url.trim()}
+              >
+                {serverTesting ? "Проверка…" : "Проверить подключение"}
+              </button>
+              <p className="hint">
+                Текущий сохранённый адрес: <strong>{getServerUrl()}</strong>
+              </p>
+              <p className="hint">
+                При смене адреса сессия администратора сбрасывается — потребуется войти снова.
+              </p>
+            </div>
+          ) : (
+            <p className="hint">
+              Адрес задаётся администратором. Текущий: <strong>{getServerUrl()}</strong>
+            </p>
           )}
         </div>
       </FormSection>
@@ -135,7 +245,7 @@ export function Settings({ isAdmin, onLogout }: Props) {
       )}
 
       <div className="action-bar action-bar-primary">
-        <button className="btn btn-primary" onClick={save}>
+        <button className="btn btn-primary" onClick={() => void save()}>
           Сохранить
         </button>
         {isAdmin && (

@@ -7,6 +7,15 @@ let socket: WebSocket | null = null;
 let handlers: Handler[] = [];
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+if (typeof window !== "undefined") {
+  window.addEventListener("fixplease-server-url-changed", () => {
+    disconnectWs();
+    if (handlers.length > 0) {
+      ensureConnected();
+    }
+  });
+}
+
 export function subscribe(handler: Handler) {
   handlers.push(handler);
   ensureConnected();
