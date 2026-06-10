@@ -38,16 +38,16 @@ pub async fn compute_stats(
     .fetch_one(pool)
     .await?;
 
-    let avg: Option<(Option<f64>,)> = sqlx::query_as(
+    let avg: (Option<f64>,) = sqlx::query_as(
         r#"
-        SELECT AVG(EXTRACT(EPOCH FROM (first_response_at - submitted_at)) / 60.0)
+        SELECT AVG(EXTRACT(EPOCH FROM (first_response_at - submitted_at)) / 60.0)::float8
         FROM tickets
         WHERE created_at >= $1 AND created_at <= $2 AND first_response_at IS NOT NULL
         "#,
     )
     .bind(from)
     .bind(to)
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
 
     let by_category = sqlx::query_as::<_, (String, i64)>(
@@ -103,7 +103,7 @@ pub async fn compute_stats(
         total_tickets: total.0,
         open_tickets: open.0,
         closed_tickets: closed.0,
-        avg_first_response_minutes: avg.and_then(|a| a.0),
+        avg_first_response_minutes: avg.0,
         by_category,
         by_admin,
         close_rate_percent: close_rate,

@@ -3,9 +3,12 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
+import notificationSound from "./assets/sounds/tethys.mp3";
 import { ticketStatusLabel } from "./statusLabels";
 import { upsertTicketHistory } from "./ticketHistory";
 import type { WsEvent, Ticket } from "./types";
+
+let sound: HTMLAudioElement | null = null;
 
 function inQuietHours(): boolean {
   const start = localStorage.getItem("quiet_start");
@@ -21,8 +24,24 @@ function inQuietHours(): boolean {
   return mins >= s || mins <= e;
 }
 
+function playNotificationSound() {
+  try {
+    if (!sound) {
+      sound = new Audio(notificationSound);
+      sound.volume = 0.75;
+    }
+    sound.currentTime = 0;
+    void sound.play().catch(() => {
+      /* браузер/Tauri может заблокировать до первого клика пользователя */
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 async function notify(title: string, body: string) {
   if (inQuietHours()) return;
+  playNotificationSound();
   let ok = await isPermissionGranted();
   if (!ok) {
     const p = await requestPermission();
@@ -57,10 +76,7 @@ export async function notifyWsEvent(event: WsEvent, isAdmin: boolean) {
       }
       break;
     case "message_created":
-      await notify(
-        "Новое сообщение",
-        event.message.body.slice(0, 80),
-      );
+      /* Чат обновляется в UI через WebSocket — без звука и без toast. */
       break;
     case "ticket_escalated":
       if (isAdmin) {
@@ -85,4 +101,13 @@ export function getLastTicketId() {
 
 export function getLastTicketNumber() {
   return localStorage.getItem("last_ticket_number");
+}
+
+/** Разблокирует воспроизведение звука после первого взаимодействия пользователя. */
+export function warmUpNotificationSound() {
+  if (!sound) {
+    sound = new Audio(notificationSound);
+    sound.volume = 0.75;
+  }
+  sound.load();
 }

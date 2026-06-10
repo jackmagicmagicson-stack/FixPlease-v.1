@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { Archive, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "../api";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
+import { TicketListItem } from "../components/TicketListItem";
 import { TicketView } from "../components/TicketView";
 import { getLastTicketId, saveLastTicket } from "../notify";
 import {
@@ -22,7 +25,6 @@ export function TrackTicket() {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [reply, setReply] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
@@ -109,17 +111,6 @@ export function TrackTicket() {
     });
   }, [ticket, loadTicket]);
 
-  const sendReply = async () => {
-    if (!ticket || !reply.trim()) return;
-    try {
-      const msg = await api.sendMessage(ticket.id, reply);
-      setMessages((m) => [...m, msg]);
-      setReply("");
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   const clearHistory = () => {
     clearTicketHistory();
     setSelectedHistoryId(null);
@@ -130,6 +121,11 @@ export function TrackTicket() {
   const activeEntries = getActiveHistoryEntries();
   const closedEntries = getClosedHistoryEntries();
   const activeCount = activeEntries.length;
+
+  const refreshCurrentTicket = async () => {
+    if (!ticket) return;
+    await loadTicket(ticket.id);
+  };
 
   return (
     <div className="card page-card page-card-wide">
@@ -160,55 +156,65 @@ export function TrackTicket() {
 
       {tab === "active" && (
         <>
-          {loading && !ticket && <div className="empty">Загрузка…</div>}
+          {loading && !ticket && (
+            <EmptyState
+              icon={Loader2}
+              title="Загрузка заявки"
+              description="Получаем актуальный статус с сервера…"
+              spinning
+            />
+          )}
           {!loading && !ticket && !error && (
-            <div className="empty">
-              Нет активных заявок. Создайте новую во вкладке «Новая заявка».
-            </div>
+            <EmptyState
+              icon={ClipboardList}
+              title="Нет активных заявок"
+              description="Создайте новую заявку — администратор увидит её в очереди."
+            />
           )}
           {ticket && (
             <TicketView
               ticket={ticket}
               messages={messages}
               attachments={attachments}
-              reply={reply}
-              onReplyChange={setReply}
-              onSendReply={sendReply}
+              onRefresh={refreshCurrentTicket}
               error={error}
             />
           )}
-          {!ticket && error && <div className="error-banner">{error}</div>}
         </>
       )}
 
       {tab === "history" && (
         <>
           {closedEntries.length === 0 ? (
-            <div className="empty">Закрытых заявок пока нет.</div>
+            <EmptyState
+              icon={Archive}
+              title="История пуста"
+              description="Закрытые заявки появятся здесь после завершения обращений."
+            />
           ) : (
-            <ul className="ticket-list history-list">
+            <ul className="ticket-list ticket-list-cards history-list">
               {closedEntries.map((e) => (
-                <li
+                <TicketListItem
                   key={e.id}
-                  className={selectedHistoryId === e.id ? "selected" : undefined}
+                  ticket={{
+                    id: e.id,
+                    public_number: e.public_number,
+                    status: e.status,
+                    closure_type: null,
+                    row_label: e.row_label,
+                    desk_label: e.desk_label,
+                    description: e.description,
+                    updated_at: e.closed_at ?? e.updated_at,
+                    is_escalated: false,
+                    is_priority: false,
+                  }}
+                  selected={selectedHistoryId === e.id}
+                  showImportance={false}
                   onClick={() => {
                     setSelectedHistoryId(e.id);
                     loadTicket(e.id);
                   }}
-                >
-                  <div className="ticket-row-head">
-                    <strong>#{e.public_number}</strong>{" "}
-                    <span className="status-closed">Закрыта</span>
-                  </div>
-                  <small>
-                    {e.row_label}, {e.desk_label} — {e.description.slice(0, 60)}
-                  </small>
-                  {e.closed_at && (
-                    <small className="hint">
-                      Закрыта: {new Date(e.closed_at).toLocaleString()}
-                    </small>
-                  )}
-                </li>
+                />
               ))}
             </ul>
           )}
@@ -219,9 +225,7 @@ export function TrackTicket() {
                 ticket={ticket}
                 messages={messages}
                 attachments={attachments}
-                reply={reply}
-                onReplyChange={setReply}
-                onSendReply={sendReply}
+                onRefresh={refreshCurrentTicket}
                 error={error}
               />
             </div>

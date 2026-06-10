@@ -1,7 +1,11 @@
+import { Check, CheckCheck } from "lucide-react";
+import { MousePointerClick } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { ChatThread } from "../components/ChatThread";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
-import { ticketStatusLabel } from "../statusLabels";
+import { StatusBadge } from "../components/StatusBadge";
 import { notifyTicketsChanged } from "../ticketEvents";
 import type { Attachment, Ticket, TicketMessage } from "../types";
 
@@ -14,9 +18,9 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [messages, setMessages] = useState<TicketMessage[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [reply, setReply] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState("");
+  const [chatError, setChatError] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const load = async () => {
@@ -34,18 +38,18 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
 
   useEffect(() => {
     setShowAdvanced(false);
+    setChatError("");
     load();
   }, [ticketId]);
 
   if (!ticketId) {
     return (
       <div className="card panel-card empty-state-panel">
-        <div className="empty-state-icon">←</div>
-        <h3>Выберите заявку слева</h3>
-        <p className="hint">
-          Список отсортирован по важности. Нажмите на строку — здесь откроется карточка с действиями и
-          чатом.
-        </p>
+        <EmptyState
+          icon={MousePointerClick}
+          title="Выберите заявку слева"
+          description="Список отсортирован по важности. Нажмите на карточку — здесь откроются действия и чат."
+        />
       </div>
     );
   }
@@ -62,14 +66,16 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
     }
   };
 
+  const nonImageAttachments = attachments.filter((a) => !a.mime_type.startsWith("image/"));
+
   return (
-    <div className="card panel-card">
+    <div className="card panel-card ticket-detail-panel">
       {ticket && (
         <PageHeader
           title={`Заявка #${ticket.public_number}`}
           lead={`${ticket.row_label}, ${ticket.desk_label}`}
         >
-          <span className={`status-pill status-${ticket.status}`}>{ticketStatusLabel(ticket)}</span>
+          <StatusBadge ticket={ticket} className="status-pill-lg" />
         </PageHeader>
       )}
 
@@ -79,7 +85,7 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
         <>
           <section className="content-block">
             <h3 className="block-title">Описание</h3>
-            <p>{ticket.description}</p>
+            <p className="ticket-description">{ticket.description}</p>
             {ticket.status === "closed" && (
               <p className="hint">
                 Заявка закрыта и скрыта из активной очереди. История — в фильтре «Закрытые».
@@ -87,39 +93,80 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
             )}
           </section>
 
+          <ChatThread
+            ticketId={ticket.id}
+            ticketClosed={ticket.status === "closed"}
+            viewerRole="admin"
+            asAdmin
+            messages={messages}
+            attachments={attachments}
+            onRefresh={load}
+            error={chatError}
+            onError={setChatError}
+          />
+
           {ticket.status !== "closed" && (
-            <section className="content-block">
+            <section className="content-block ticket-actions-section">
               <h3 className="block-title">Действия</h3>
-              <div className="action-bar action-bar-primary">
-                {ticket.status === "new" && (
-                  <button className="btn btn-primary btn-lg" onClick={() => act(() => api.takeTicket(ticket.id))}>
+
+              {ticket.status === "new" && (
+                <div className="ticket-actions">
+                  <button
+                    className="btn btn-primary btn-lg btn-block"
+                    onClick={() => act(() => api.takeTicket(ticket.id))}
+                  >
                     Взять в работу
                   </button>
-                )}
-                {ticket.status === "in_progress" && (
-                  <>
-                    <button className="btn btn-primary" onClick={() => act(() => api.resolveTicket(ticket.id))}>
-                      Отметить решённой
-                    </button>
-                    <button
-                      className="btn btn-primary btn-lg"
-                      onClick={() =>
-                        act(async () => {
-                          await api.resolveTicket(ticket.id);
-                          return api.closeTicket(ticket.id);
-                        })
-                      }
-                    >
-                      Решить и закрыть
-                    </button>
-                  </>
-                )}
-                {ticket.status === "resolved" && (
-                  <button className="btn btn-primary btn-lg" onClick={() => act(() => api.closeTicket(ticket.id))}>
+                </div>
+              )}
+
+              {ticket.status === "in_progress" && (
+                <div className="ticket-actions ticket-actions-split">
+                  <button
+                    type="button"
+                    className="ticket-action-card ticket-action-secondary"
+                    onClick={() => act(() => api.resolveTicket(ticket.id))}
+                  >
+                    <span className="ticket-action-icon" aria-hidden>
+                      <Check size={20} strokeWidth={2.25} />
+                    </span>
+                    <span className="ticket-action-label">Отметить решённой</span>
+                    <span className="ticket-action-hint">
+                      Статус «Решена» — сотрудник ещё может написать в чат
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="ticket-action-card ticket-action-primary"
+                    onClick={() =>
+                      act(async () => {
+                        await api.resolveTicket(ticket.id);
+                        return api.closeTicket(ticket.id);
+                      })
+                    }
+                  >
+                    <span className="ticket-action-icon" aria-hidden>
+                      <CheckCheck size={20} strokeWidth={2.25} />
+                    </span>
+                    <span className="ticket-action-label">Решить и закрыть</span>
+                    <span className="ticket-action-hint">
+                      Типичный сценарий — заявка сразу уходит в архив
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {ticket.status === "resolved" && (
+                <div className="ticket-actions">
+                  <button
+                    className="btn btn-primary btn-lg btn-block"
+                    onClick={() => act(() => api.closeTicket(ticket.id))}
+                  >
                     Закрыть заявку
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -154,57 +201,16 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
             </section>
           )}
 
-          <section className="content-block">
-            <h3 className="block-title">Переписка с сотрудником</h3>
-            <div className="messages">
-              {messages.length === 0 && <p className="hint">Сообщений пока нет.</p>}
-              {messages.map((m) => (
-                <div key={m.id} className={`message message-${m.author_role}`}>
-                  <div className="meta">
-                    {m.author_role === "admin" ? "Вы" : "Сотрудник"} —{" "}
-                    {new Date(m.created_at).toLocaleString()}
-                  </div>
-                  {m.body}
-                </div>
-              ))}
-            </div>
-            {ticket.status !== "closed" && (
-              <div className="toolbar">
-                <input
-                  style={{ flex: 1 }}
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  placeholder="Ответить сотруднику…"
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={async () => {
-                    await api.sendMessage(ticket.id, reply, true);
-                    setReply("");
-                    load();
-                    notifyTicketsChanged();
-                  }}
-                >
-                  Отправить
-                </button>
-              </div>
-            )}
-          </section>
-
-          {attachments.length > 0 && (
+          {nonImageAttachments.length > 0 && (
             <section className="content-block">
-              <h3 className="block-title">Вложения</h3>
-              {attachments.map((a) =>
-                a.mime_type.startsWith("image/") ? (
-                  <img key={a.id} className="preview-img" src={api.attachmentUrl(a.id)} alt={a.filename} />
-                ) : (
-                  <p key={a.id}>
-                    <a href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">
-                      {a.filename}
-                    </a>
-                  </p>
-                ),
-              )}
+              <h3 className="block-title">Файлы</h3>
+              {nonImageAttachments.map((a) => (
+                <p key={a.id}>
+                  <a href={api.attachmentUrl(a.id)} target="_blank" rel="noreferrer">
+                    {a.filename}
+                  </a>
+                </p>
+              ))}
             </section>
           )}
         </>
