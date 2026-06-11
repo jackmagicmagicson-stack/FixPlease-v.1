@@ -10,7 +10,8 @@ import {
   Settings as SettingsIcon,
   Shield,
 } from "lucide-react";
-import { api, setAdminToken } from "./api";
+import { api, getAdminToken, setAdminToken } from "./api";
+import { checkForUpdates } from "./updater";
 import { AppLogo } from "./components/AppLogo";
 import { ConnectionBadge } from "./components/ConnectionBadge";
 import { GlassPageTransition } from "./components/GlassPageTransition";
@@ -28,8 +29,6 @@ import type { Ticket } from "./types";
 
 type EmployeeTab = "create" | "track";
 type AdminTab = "queue" | "reference" | "reports";
-
-const APP_VERSION = "0.1.0";
 
 function NavButton({
   active,
@@ -66,26 +65,53 @@ export default function App() {
   const [versionBlocked, setVersionBlocked] = useState(false);
   const [serverOk, setServerOk] = useState(true);
   const [queueCount, setQueueCount] = useState<number | null>(null);
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   useEffect(() => {
-    const checkServer = () => {
+    let cancelled = false;
+
+    const refreshConnection = () => {
       api
         .version()
         .then((v) => {
-          if (compareSemver(APP_VERSION, v.min_client_version) < 0) {
+          if (cancelled) return;
+          if (compareSemver(__APP_VERSION__, v.min_client_version) < 0) {
             setVersionBlocked(true);
           }
           setServerOk(true);
         })
-        .catch(() => setServerOk(false));
+        .catch(() => {
+          if (!cancelled) setServerOk(false);
+        });
 
-      api.health().then(() => setServerOk(true)).catch(() => setServerOk(false));
+      api
+        .health()
+        .then(() => {
+          if (!cancelled) setServerOk(true);
+        })
+        .catch(() => {
+          if (!cancelled) setServerOk(false);
+        });
     };
 
-    checkServer();
-    window.addEventListener("fixplease-server-url-changed", checkServer);
-    return () => window.removeEventListener("fixplease-server-url-changed", checkServer);
+    refreshConnection();
+    const onUrlChange = () => refreshConnection();
+    window.addEventListener("fixplease-server-url-changed", onUrlChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("fixplease-server-url-changed", onUrlChange);
+    };
   }, []);
+
+  useEffect(() => {
+    if (mode !== "admin") return;
+    if (!getAdminToken()) {
+      setAdminAuthed(false);
+      return;
+    }
+    api.validateAdminSession().then(setAdminAuthed);
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "admin" || !adminAuthed) {
@@ -122,11 +148,12 @@ export default function App() {
   }, []);
 
   const openAdminCabinet = () => {
-    setAdminToken(null);
-    setAdminAuthed(false);
     setMode("admin");
     setSettingsOpen(false);
     setSelectedTicket(null);
+    if (!getAdminToken()) {
+      setAdminAuthed(false);
+    }
   };
 
   const switchToEmployee = () => {
@@ -140,9 +167,40 @@ export default function App() {
   if (versionBlocked) {
     return (
       <div className="app-shell">
-        <div className="error-banner">
-          Требуется обновление приложения. Нажмите «Проверить обновления» в настройках или
-          переустановите клиент.
+        <div className="card page-card" style={{ margin: "2rem auto", maxWidth: 480 }}>
+          <h2>Требуется обновление</h2>
+          <p className="hint">
+            Установлена версия {__APP_VERSION__}. Сервер требует более новый клиент.
+          </p>
+          {updateMsg && <div className="info-banner">{updateMsg}</div>}
+          <div className="action-bar action-bar-primary">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={updateLoading}
+              onClick={async () => {
+                setUpdateLoading(true);
+                setUpdateMsg("");
+                try {
+                  setUpdateMsg(await checkForUpdates());
+                } catch (e) {
+                  setUpdateMsg(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setUpdateLoading(false);
+                }
+              }}
+            >
+              {updateLoading ? "Проверка…" : "Проверить обновления"}
+            </button>
+            <a
+              className="btn"
+              href="https://github.com/jackmagicmagicson-stack/FixPlease-v.1/releases"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Скачать вручную
+            </a>
+          </div>
         </div>
       </div>
     );

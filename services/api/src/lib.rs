@@ -5,10 +5,13 @@ mod error;
 mod jobs;
 mod models;
 mod routes;
+mod semver;
 mod state;
 mod stats;
 mod tickets;
 mod ws;
+
+pub const DEFAULT_JWT_SECRET: &str = "change-me-in-production-use-long-secret";
 
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{Any, CorsLayer};
@@ -33,14 +36,15 @@ pub async fn run() -> anyhow::Result<()> {
 
     sqlx::migrate!("../../migrations").run(&pool).await?;
 
-    bootstrap_admin(&pool, config.bootstrap_admin_password.as_deref()).await?;
+    bootstrap_admin(
+        &pool,
+        config.bootstrap_admin_password.as_deref(),
+        config.strict_config,
+    )
+    .await?;
 
     let events = ws::new_hub();
-    jobs::spawn_background_jobs(
-        pool.clone(),
-        events.clone(),
-        config.attachments_dir.clone(),
-    );
+    jobs::spawn_background_jobs(pool.clone(), events.clone());
 
     let state = state::AppState::new(pool, config.clone(), events);
     let app = routes::router(state).layer(
@@ -56,13 +60,23 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn bootstrap_admin(pool: &sqlx::PgPool, password: Option<&str>) -> anyhow::Result<()> {
+async fn bootstrap_admin(
+    pool: &sqlx::PgPool,
+    password: Option<&str>,
+    strict: bool,
+) -> anyhow::Result<()> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins")
         .fetch_one(pool)
         .await?;
 
     if count.0 == 0 {
-        let pwd = password.unwrap_or("admin");
+        let pwd = match password {
+            Some(p) => p,
+            None if strict => {
+                anyhow::bail!("BOOTSTRAP_ADMIN_PASSWORD required to create initial admin");
+            }
+            None => "admin",
+        };
         let hash = auth::hash_password(pwd).await?;
         sqlx::query("INSERT INTO admins (display_name, password_hash) VALUES ($1, $2)")
             .bind("Admin")

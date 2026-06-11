@@ -6,6 +6,8 @@ import type {
   Ticket,
   TicketMessage,
 } from "./types";
+import { appFetch } from "./httpFetch";
+import { disconnectWs } from "./ws";
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:8080";
 
@@ -37,7 +39,7 @@ export async function checkServerAt(url: string): Promise<boolean> {
   const target = normalizeServerUrl(url);
   if (!isValidServerUrl(target)) return false;
   try {
-    const res = await fetch(`${target}/health`);
+    const res = await appFetch(`${target}/health`);
     return res.ok;
   } catch {
     return false;
@@ -47,6 +49,7 @@ export async function checkServerAt(url: string): Promise<boolean> {
 export function setServerUrl(url: string) {
   const next = normalizeServerUrl(url);
   if (next !== baseUrl) {
+    disconnectWs();
     setAdminToken(null);
   }
   baseUrl = next;
@@ -85,7 +88,7 @@ async function request<T>(
   }
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}${path}`, { ...options, headers });
+    res = await appFetch(`${baseUrl}${path}`, { ...options, headers });
   } catch (e) {
     console.error("network error", e);
     throw new Error("Ошибка сети. Проверьте подключение к серверу.");
@@ -106,8 +109,8 @@ async function request<T>(
 
 export const api = {
   health: async () => {
-    const res = await fetch(`${baseUrl}/health`);
-    if (!res.ok) throw new Error("server unreachable");
+    const res = await appFetch(`${baseUrl}/health`);
+    if (!res.ok) throw new Error(`server unreachable (${res.status})`);
     return res.text();
   },
   version: () =>
@@ -164,7 +167,7 @@ export const api = {
   createTicket: (data: {
     row_label: string;
     desk_label: string;
-    category_id: string;
+    category_id?: string;
     description: string;
     save_as_draft?: boolean;
   }) =>
@@ -234,6 +237,9 @@ export const api = {
       quiet_hours_end: string | null;
       min_client_version: string;
       retention_days: number;
+      client_update_version: string | null;
+      client_update_url: string | null;
+      client_update_signature: string | null;
     }>("/v1/settings"),
   updateSettings: (data: Record<string, unknown>) =>
     request("/v1/settings", {

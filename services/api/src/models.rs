@@ -96,13 +96,16 @@ pub struct AppSettings {
     pub quiet_hours_end: Option<chrono::NaiveTime>,
     pub min_client_version: String,
     pub retention_days: i32,
+    pub client_update_version: Option<String>,
+    pub client_update_url: Option<String>,
+    pub client_update_signature: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTicketRequest {
     pub row_label: String,
     pub desk_label: String,
-    pub category_id: Uuid,
+    pub category_id: Option<Uuid>,
     pub description: String,
     pub save_as_draft: Option<bool>,
 }
@@ -168,9 +171,10 @@ pub struct UpsertTemplateRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateSettingsRequest {
     pub escalation_minutes: Option<i32>,
-    pub quiet_hours_start: Option<String>,
-    pub quiet_hours_end: Option<String>,
     pub min_client_version: Option<String>,
+    pub client_update_version: Option<String>,
+    pub client_update_url: Option<String>,
+    pub client_update_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

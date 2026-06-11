@@ -60,7 +60,7 @@ pub async fn run_escalation(pool: &PgPool, events: &EventSender) {
     }
 }
 
-pub async fn run_retention(pool: &PgPool, attachments_dir: &std::path::Path) {
+pub async fn run_retention(pool: &PgPool) {
     let settings: (i32,) = match sqlx::query_as("SELECT retention_days FROM app_settings WHERE id = 1")
         .fetch_one(pool)
         .await
@@ -109,11 +109,9 @@ pub async fn run_retention(pool: &PgPool, attachments_dir: &std::path::Path) {
     } else {
         info!("retention purge before {cutoff}");
     }
-
-    let _ = attachments_dir;
 }
 
-pub fn spawn_background_jobs(pool: PgPool, events: EventSender, attachments_dir: std::path::PathBuf) {
+pub fn spawn_background_jobs(pool: PgPool, events: EventSender) {
     let pool_esc = pool.clone();
     let events_esc = events.clone();
     tokio::spawn(async move {
@@ -123,11 +121,9 @@ pub fn spawn_background_jobs(pool: PgPool, events: EventSender, attachments_dir:
         }
     });
 
-    let pool2 = pool;
-    let dir = attachments_dir.clone();
     tokio::spawn(async move {
         loop {
-            run_retention(&pool2, &dir).await;
+            run_retention(&pool).await;
             tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
         }
     });

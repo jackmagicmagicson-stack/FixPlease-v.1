@@ -13,8 +13,9 @@ use uuid::Uuid;
 
 use crate::{
     attachments::{get_attachment, save_attachment},
-    auth::{verify_password, AdminAuth, issue_token},
+    auth::{issue_token, verify_password, AdminAuth},
     error::{ApiError, ApiResult},
+    semver,
     models::{
         AppSettings, AuthorRole, CategoryTemplate, CloseRequest, CreateCategoryRequest,
         CreateTicketRequest, LoginRequest, LoginResponse, MessageRequest, PurgeClosedRequest,
@@ -86,24 +87,52 @@ async fn health() -> &'static str {
     "ok"
 }
 
+const SETTINGS_SELECT: &str = "SELECT escalation_minutes, quiet_hours_start, quiet_hours_end, min_client_version, retention_days, client_update_version, client_update_url, client_update_signature FROM app_settings WHERE id = 1";
+
 async fn updater_manifest(
+    State(state): State<AppState>,
     Path((target, arch, current)): Path<(String, String, String)>,
-) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "version": env!("CARGO_PKG_VERSION"),
+) -> Result<impl IntoResponse, ApiError> {
+    let settings: AppSettings = sqlx::query_as(SETTINGS_SELECT)
+        .fetch_one(&state.db)
+        .await?;
+
+    let update_version = match settings.client_update_version {
+        Some(ref v) if !v.is_empty() => v.clone(),
+        _ => return Ok(StatusCode::NO_CONTENT.into_response()),
+    };
+
+    let url = match settings.client_update_url {
+        Some(ref u) if !u.is_empty() => u.clone(),
+        _ => return Ok(StatusCode::NO_CONTENT.into_response()),
+    };
+
+    let signature = match settings.client_update_signature {
+        Some(ref s) if !s.is_empty() => s.clone(),
+        _ => return Ok(StatusCode::NO_CONTENT.into_response()),
+    };
+
+    if semver::compare(&current, &update_version) >= 0 {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    }
+
+    let platform_key = format!("{target}-{arch}");
+    Ok(Json(serde_json::json!({
+        "version": update_version,
         "notes": "FixPlease update",
         "pub_date": chrono::Utc::now().to_rfc3339(),
         "platforms": {
-            format!("{}-{}", target, arch): {
-                "signature": "",
-                "url": format!("/releases/fixplease-{}-{}.msi", current, target)
+            platform_key: {
+                "signature": signature,
+                "url": url
             }
         }
     }))
+    .into_response())
 }
 
 async fn version(State(state): State<AppState>) -> ApiResult<Json<VersionResponse>> {
-    let settings: AppSettings = sqlx::query_as("SELECT escalation_minutes, quiet_hours_start, quiet_hours_end, min_client_version, retention_days FROM app_settings WHERE id = 1")
+    let settings: AppSettings = sqlx::query_as(SETTINGS_SELECT)
         .fetch_one(&state.db)
         .await?;
     Ok(Json(VersionResponse {
@@ -393,11 +422,9 @@ async fn download_attachment_handler(
 }
 
 async fn get_settings_handler(State(state): State<AppState>) -> ApiResult<Json<AppSettings>> {
-    let settings = sqlx::query_as(
-        "SELECT escalation_minutes, quiet_hours_start, quiet_hours_end, min_client_version, retention_days FROM app_settings WHERE id = 1",
-    )
-    .fetch_one(&state.db)
-    .await?;
+    let settings = sqlx::query_as(SETTINGS_SELECT)
+        .fetch_one(&state.db)
+        .await?;
     Ok(Json(settings))
 }
 
@@ -406,34 +433,23 @@ async fn update_settings_handler(
     AdminAuth(_): AdminAuth,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> ApiResult<Json<AppSettings>> {
-    let start = req
-        .quiet_hours_start
-        .as_ref()
-        .map(|s| chrono::NaiveTime::parse_from_str(s, "%H:%M"))
-        .transpose()
-        .map_err(|_| ApiError::BadRequest("invalid quiet_hours_start".into()))?;
-    let end = req
-        .quiet_hours_end
-        .as_ref()
-        .map(|s| chrono::NaiveTime::parse_from_str(s, "%H:%M"))
-        .transpose()
-        .map_err(|_| ApiError::BadRequest("invalid quiet_hours_end".into()))?;
-
     sqlx::query(
         r#"
         UPDATE app_settings SET
             escalation_minutes = COALESCE($1, escalation_minutes),
-            quiet_hours_start = COALESCE($2, quiet_hours_start),
-            quiet_hours_end = COALESCE($3, quiet_hours_end),
-            min_client_version = COALESCE($4, min_client_version),
+            min_client_version = COALESCE($2, min_client_version),
+            client_update_version = COALESCE($3, client_update_version),
+            client_update_url = COALESCE($4, client_update_url),
+            client_update_signature = COALESCE($5, client_update_signature),
             updated_at = NOW()
         WHERE id = 1
         "#,
     )
     .bind(req.escalation_minutes)
-    .bind(start)
-    .bind(end)
     .bind(req.min_client_version)
+    .bind(req.client_update_version)
+    .bind(req.client_update_url)
+    .bind(req.client_update_signature)
     .execute(&state.db)
     .await?;
 

@@ -99,10 +99,6 @@ export function getLastTicketId() {
   return localStorage.getItem("last_ticket_id");
 }
 
-export function getLastTicketNumber() {
-  return localStorage.getItem("last_ticket_number");
-}
-
 /** Разблокирует воспроизведение звука после первого взаимодействия пользователя. */
 export function warmUpNotificationSound() {
   if (!sound) {

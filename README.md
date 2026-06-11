@@ -19,13 +19,16 @@
 ## Структура репозитория
 
 ```
-FixPlease/
+FixPlease-v.1/
 ├── apps/desktop/     # Клиент Tauri 2 + React
 ├── services/api/     # REST API и WebSocket
 ├── migrations/       # SQL-миграции PostgreSQL
 ├── deploy/           # Docker Compose, nginx, скрипты деплоя
-└── docs/             # Руководство администратора
+├── docs/             # Руководство администратора, чеклист приёмки
+└── scripts/          # Smoke-тесты
 ```
+
+Чеклист приёмки MVP: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).
 
 ---
 
@@ -67,9 +70,11 @@ cp .env.example .env
 
 | Переменная | Описание |
 |------------|----------|
-| `JWT_SECRET` | Длинная случайная строка (секрет для сессий) |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Пароль входа в кабинет администратора |
+| `JWT_SECRET` | Длинная случайная строка (секрет для сессий) — **обязательно** |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Пароль входа в кабинет администратора — **обязательно** |
 | `HTTPS_PORT` | Порт HTTPS (по умолчанию `443`) |
+
+В production Docker Compose включён `FIXPLEASE_STRICT_CONFIG=1`: API не стартует с дефолтными секретами.
 
 ### 3. TLS-сертификаты
 
@@ -172,7 +177,7 @@ cargo run -p fixplease-api
 3. Установите на каждый компьютер офиса
 4. При первом запуске: **Настройки → Адрес сервера** → `https://<IP-сервера>` → **Сохранить**
 
-> Обычным сотрудникам адрес сервера настраивает IT один раз; поле только для чтения после сохранения.
+> Обычно адрес сервера настраивает IT один раз; при необходимости его можно изменить в **Настройки → Адрес сервера**.
 
 ### Вариант B — сборка из исходников
 
@@ -185,6 +190,15 @@ npm run tauri build
 Артефакты: `apps/desktop/src-tauri/target/release/bundle/` (MSI, NSIS).
 
 На push в `main` Windows-сборка также запускается в GitHub Actions (см. `.github/workflows/build.yml`).
+
+### Автообновление клиента
+
+1. Сгенерируйте ключ подписи (один раз): `npx tauri signer generate --ci -p "" -w deploy/fixplease.key`
+2. Публичный ключ уже прописан в `apps/desktop/src-tauri/tauri.conf.json`.
+3. В CI добавьте GitHub Secret `TAURI_SIGNING_PRIVATE_KEY` (содержимое `deploy/fixplease.key`).
+4. После сборки релиза в **Настройки → Манифест обновления** укажите версию, HTTPS URL установщика и содержимое `.sig` файла.
+
+Клиент проверяет обновления через `https://<сервер>/v1/updater/...` (кнопка «Проверить обновления»).
 
 ---
 
@@ -227,6 +241,20 @@ docker compose up -d --build api
 ### Сессия администратора истекла
 
 Войдите в кабинет снова — пароль из `BOOTSTRAP_ADMIN_PASSWORD`.
+
+---
+
+## Тестирование
+
+```bash
+# API unit + DB тесты (нужен PostgreSQL)
+DATABASE_URL=postgres://fixplease:fixplease@localhost:5432/fixplease cargo test -p fixplease-api
+
+# Smoke (API должен быть запущен)
+./scripts/smoke_test.sh 50
+```
+
+В CI job `api` smoke и WebSocket-тест запускаются автоматически.
 
 ---
 

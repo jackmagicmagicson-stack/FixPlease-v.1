@@ -28,9 +28,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p fixplease-api
+      - name: Unit and DB tests
+        run: cargo test -p fixplease-api
         env:
           DATABASE_URL: postgres://fixplease:fixplease@localhost:5432/fixplease
+      - name: Start API for integration tests
+        run: |
+          cargo build --release -p fixplease-api
+          ./target/release/fixplease-api &
+          echo $! > api.pid
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8080/health >/dev/null; then
+              echo "API ready"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/health
+        env:
+          DATABASE_URL: postgres://fixplease:fixplease@localhost:5432/fixplease
+          JWT_SECRET: ci-test-jwt-secret-not-for-production
+          BOOTSTRAP_ADMIN_PASSWORD: ci-admin
+      - name: Smoke test
+        run: bash scripts/smoke_test.sh 50
+        env:
+          TEST_API_URL: http://127.0.0.1:8080
+      - name: WebSocket delivery test
+        run: cargo test -p fixplease-api --test ws_delivery -- --ignored
+        env:
+          DATABASE_URL: postgres://fixplease:fixplease@localhost:5432/fixplease
+          TEST_API_URL: http://127.0.0.1:8080
+      - name: Stop API
+        if: always()
+        run: kill "$(cat api.pid)" 2>/dev/null || true
 
   windows-client:
     runs-on: windows-latest
@@ -40,6 +70,9 @@ jobs:
         with:
           node-version: "20"
       - uses: dtolnay/rust-toolchain@stable
+      - name: Generate updater signing key (CI)
+        run: npx tauri signer generate --ci -p "" -w fixplease-ci.key -f
+        working-directory: apps/desktop
       - run: npm ci
         working-directory: apps/desktop
       - run: npm run build
@@ -53,6 +86,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: app-v__VERSION__

@@ -1,11 +1,11 @@
 import { MessageCircle, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../constants";
 import { EmptyState } from "./EmptyState";
 import type { Attachment, TicketMessage } from "../types";
 
-const MAX_ATTACHMENTS = 3;
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = MAX_ATTACHMENT_BYTES;
 const ATTACHMENT_AUTHORS_KEY = "fixplease_attachment_authors";
 
 type ViewerRole = "admin" | "employee";

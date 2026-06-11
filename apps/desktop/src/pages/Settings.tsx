@@ -15,6 +15,7 @@ import {
   hasSavedLocation,
   saveLastLocation,
 } from "../locationMemory";
+import { checkForUpdates } from "../updater";
 
 interface Props {
   isAdmin: boolean;
@@ -29,6 +30,16 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
   const [serverError, setServerError] = useState("");
   const [serverTesting, setServerTesting] = useState(false);
   const [serverTestOk, setServerTestOk] = useState<boolean | null>(null);
+  const [quietStart, setQuietStart] = useState(localStorage.getItem("quiet_start") || "");
+  const [quietEnd, setQuietEnd] = useState(localStorage.getItem("quiet_end") || "");
+  const [escalation, setEscalation] = useState(15);
+  const [minClientVersion, setMinClientVersion] = useState("0.1.0");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateUrl, setUpdateUrl] = useState("");
+  const [updateSignature, setUpdateSignature] = useState("");
+  const [msg, setMsg] = useState("");
+  const [updateMsg, setUpdateMsg] = useState("");
+  const [updateLoading, setUpdateLoading] = useState(false);
 
   useEffect(() => {
     setUrl(getServerUrl());
@@ -37,16 +48,17 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
     setDesk(loc.desk);
   }, []);
 
-  const [quietStart, setQuietStart] = useState(localStorage.getItem("quiet_start") || "");
-  const [quietEnd, setQuietEnd] = useState(localStorage.getItem("quiet_end") || "");
-  const [escalation, setEscalation] = useState(15);
-  const [msg, setMsg] = useState("");
-
   useEffect(() => {
     if (!isAdmin) return;
     api
       .settings()
-      .then((s) => setEscalation(s.escalation_minutes))
+      .then((s) => {
+        setEscalation(s.escalation_minutes);
+        setMinClientVersion(s.min_client_version);
+        setUpdateVersion(s.client_update_version || "");
+        setUpdateUrl(s.client_update_url || "");
+        setUpdateSignature(s.client_update_signature || "");
+      })
       .catch(() => {});
   }, [isAdmin]);
 
@@ -89,8 +101,10 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
       try {
         await api.updateSettings({
           escalation_minutes: escalation,
-          quiet_hours_start: quietStart || null,
-          quiet_hours_end: quietEnd || null,
+          min_client_version: minClientVersion,
+          client_update_version: updateVersion || null,
+          client_update_url: updateUrl || null,
+          client_update_signature: updateSignature || null,
         });
       } catch (e) {
         setServerError(e instanceof Error ? e.message : String(e));
@@ -125,6 +139,19 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
     setMsg("Сохранено");
   };
 
+  const runUpdateCheck = async () => {
+    setUpdateMsg("");
+    setUpdateLoading(true);
+    try {
+      const result = await checkForUpdates();
+      setUpdateMsg(result);
+    } catch (e) {
+      setUpdateMsg(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   return (
     <div className="card page-card">
       <PageHeader
@@ -140,6 +167,7 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
       {serverTestOk === true && !serverError && (
         <div className="success-banner">Сервер доступен.</div>
       )}
+      {updateMsg && <div className="info-banner">{updateMsg}</div>}
 
       <FormSection
         title="Подключение к серверу"
@@ -231,17 +259,72 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
         </div>
       </FormSection>
 
+      <FormSection title="Обновления приложения">
+        <p className="hint">
+          Проверка загружает манифест с сервера. Версия клиента: {__APP_VERSION__}
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void runUpdateCheck()}
+          disabled={updateLoading}
+        >
+          {updateLoading ? "Проверка…" : "Проверить обновления"}
+        </button>
+      </FormSection>
+
       {isAdmin && (
-        <FormSection title="Параметры очереди" hint="Влияют на всех администраторов">
-          <div className="form-row">
-            <label>Эскалация (минут без ответа)</label>
-            <input
-              type="number"
-              value={escalation}
-              onChange={(e) => setEscalation(parseInt(e.target.value, 10))}
-            />
-          </div>
-        </FormSection>
+        <>
+          <FormSection title="Параметры очереди" hint="Влияют на всех администраторов">
+            <div className="form-row">
+              <label>Эскалация (минут без ответа)</label>
+              <input
+                type="number"
+                value={escalation}
+                onChange={(e) => setEscalation(parseInt(e.target.value, 10))}
+              />
+            </div>
+            <div className="form-row">
+              <label>Минимальная версия клиента</label>
+              <input
+                value={minClientVersion}
+                onChange={(e) => setMinClientVersion(e.target.value)}
+                placeholder="0.1.0"
+              />
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Манифест обновления клиента"
+            hint="После сборки релиза укажите версию, URL установщика и подпись из .sig файла"
+          >
+            <div className="form-row">
+              <label>Версия обновления</label>
+              <input
+                value={updateVersion}
+                onChange={(e) => setUpdateVersion(e.target.value)}
+                placeholder="0.2.0"
+              />
+            </div>
+            <div className="form-row">
+              <label>URL установщика</label>
+              <input
+                value={updateUrl}
+                onChange={(e) => setUpdateUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="form-row">
+              <label>Подпись (.sig)</label>
+              <textarea
+                value={updateSignature}
+                onChange={(e) => setUpdateSignature(e.target.value)}
+                placeholder="Содержимое файла подписи"
+                rows={4}
+              />
+            </div>
+          </FormSection>
+        </>
       )}
 
       <div className="action-bar action-bar-primary">
