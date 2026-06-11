@@ -48,7 +48,8 @@ export function WindowTitleBar() {
           <button
             type="button"
             className="window-control window-control-close"
-            aria-label="Закрыть"
+            aria-label="Свернуть в трей"
+            title="Свернуть в трей"
             onClick={close}
           >
             <X size={14} strokeWidth={2} />
