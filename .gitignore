@@ -3,6 +3,9 @@
 **/dist/
 .env
 deploy/nginx/certs/*.pem
+deploy/nginx/certs/*.srl
+deploy/nginx/certs/*.ext
+deploy/nginx/certs/*.csr.pem
 deploy/fixplease.key
 deploy/fixplease.key.pub
 data/

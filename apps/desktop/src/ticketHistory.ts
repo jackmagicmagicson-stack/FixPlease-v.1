@@ -59,3 +59,26 @@ export function getActiveHistoryEntries(): TicketHistoryEntry[] {
 export function getClosedHistoryEntries(): TicketHistoryEntry[] {
   return getTicketHistory().filter((e) => e.status === "closed");
 }
+
+/** Минимальный Ticket из локальной истории — для офлайн-отображения при сбое сети. */
+export function historyEntryToTicket(entry: TicketHistoryEntry): Ticket {
+  return {
+    id: entry.id,
+    public_number: entry.public_number,
+    row_label: entry.row_label,
+    desk_label: entry.desk_label,
+    category_id: "",
+    description: entry.description,
+    status: entry.status,
+    closure_type: null,
+    closure_reason: null,
+    assigned_admin_id: null,
+    is_priority: false,
+    is_escalated: false,
+    created_at: entry.updated_at,
+    submitted_at: null,
+    first_response_at: null,
+    resolved_at: null,
+    closed_at: entry.closed_at,
+  };
+}

@@ -14,6 +14,7 @@ import {
   getActiveHistoryEntries,
   getClosedHistoryEntries,
   getTicketHistory,
+  historyEntryToTicket,
   upsertTicketHistory,
 } from "../ticketHistory";
 import { subscribe } from "../ws";
@@ -62,7 +63,10 @@ export function TrackTicket({ onCreateTicket }: Props) {
       refreshHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      setTicket(null);
+      const cached = getTicketHistory().find((entry) => entry.id === id);
+      if (cached) {
+        setTicket(historyEntryToTicket(cached));
+      }
     } finally {
       setLoading(false);
     }
@@ -110,7 +114,16 @@ export function TrackTicket({ onCreateTicket }: Props) {
   }, [tab, historyVersion, loadTicket]);
 
   useEffect(() => {
-    return subscribe((ev) => {
+    const onPoll = () => {
+      if (tab === "active") {
+        const active = getActiveHistoryEntries();
+        if (active.length > 0) {
+          void loadTicket(active[0].id);
+        }
+      }
+    };
+    window.addEventListener("fixplease-ws-poll", onPoll);
+    const unsub = subscribe((ev) => {
       const historyIds = new Set(getTicketHistory().map((e) => e.id));
       if (ev.type === "ticket_updated" && historyIds.has(ev.ticket.id)) {
         upsertTicketHistory(ev.ticket);
@@ -127,7 +140,11 @@ export function TrackTicket({ onCreateTicket }: Props) {
         loadTicket(ticket.id);
       }
     });
-  }, [ticket, loadTicket]);
+    return () => {
+      window.removeEventListener("fixplease-ws-poll", onPoll);
+      unsub();
+    };
+  }, [tab, ticket, loadTicket]);
 
   const searchByNumber = useCallback(
     async (num: number) => {
@@ -187,7 +204,7 @@ export function TrackTicket({ onCreateTicket }: Props) {
           spinning
         />
       )}
-      {!loading && !ticket && !error && (
+      {!loading && !ticket && activeCount === 0 && (
         <EmptyState
           icon={ClipboardList}
           title="Нет активных заявок"
@@ -368,12 +385,14 @@ export function TrackTicket({ onCreateTicket }: Props) {
       </nav>
 
       {tab === "active" &&
-        (enhanced && ticket ? (
+        (enhanced && (ticket || activeEntries[0]) ? (
           <div className="employee-track-split employee-track-active">
             <aside className="employee-track-sidebar">
               <div className="employee-track-sidebar-card">
                 <p className="block-title">Активная заявка</p>
-                <p className="hint">#{ticket.public_number}</p>
+                <p className="hint">
+                  #{(ticket ?? historyEntryToTicket(activeEntries[0])).public_number}
+                </p>
               </div>
             </aside>
             <div className="employee-track-detail">{activeContent}</div>

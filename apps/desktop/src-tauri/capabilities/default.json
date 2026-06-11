@@ -15,6 +15,7 @@
     "core:window:allow-start-dragging",
     "core:tray:default",
     "notification:default",
+    "websocket:default",
     "updater:default",
     "dialog:default",
     "fs:default",

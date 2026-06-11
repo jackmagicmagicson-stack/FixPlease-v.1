@@ -9,12 +9,16 @@
 ## Установка
 
 1. Скопируйте репозиторий на сервер.
-2. Сгенерируйте TLS-сертификаты (или замените на корпоративные):
+2. Сгенерируйте TLS: корневой CA + серверный сертификат с SAN для LAN IP:
 
-```bash
-cd deploy/scripts
-bash gen-certs.sh
+```powershell
+cd deploy\scripts
+.\gen-ca-certs.ps1 -LanIp 192.168.0.173
 ```
+
+Публичный CA (`fixplease-ca.cer`) копируется в клиентский установщик. Приватные ключи (`ca.key.pem`, `key.pem`) не коммитятся.
+
+После смены сертификата: `docker compose restart nginx` в `deploy/`.
 
 3. Создайте `.env` из примера:
 

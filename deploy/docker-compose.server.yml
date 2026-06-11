@@ -1,0 +1,6 @@
+# Overlay for MITA Windows Server: use images already present locally when Docker Hub is slow/unreachable.
+services:
+  db:
+    image: postgres:15-alpine
+  nginx:
+    image: nginx:alpine

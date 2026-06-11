@@ -8,7 +8,7 @@ RUN sed -i 's/members = \[.*\]/members = ["services\/api"]/' Cargo.toml \
     && cargo build --release -p fixplease-api
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /etc/ssl/certs /etc/ssl/certs
 WORKDIR /app
 COPY --from=builder /app/target/release/fixplease-api /usr/local/bin/fixplease-api
 COPY migrations /app/migrations

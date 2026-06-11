@@ -39,9 +39,16 @@ function playNotificationSound() {
   }
 }
 
+function showInAppToast(title: string, body: string) {
+  window.dispatchEvent(
+    new CustomEvent("fixplease-toast", { detail: { message: `${title}: ${body}` } }),
+  );
+}
+
 async function notify(title: string, body: string) {
   if (inQuietHours()) return;
   playNotificationSound();
+  showInAppToast(title, body);
   let ok = await isPermissionGranted();
   if (!ok) {
     const p = await requestPermission();

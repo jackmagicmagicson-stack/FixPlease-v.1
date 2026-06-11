@@ -139,6 +139,17 @@ export default function App() {
     return () => window.removeEventListener("fixplease-show-onboarding", showOnboardingAgain);
   }, []);
 
+  useEffect(() => {
+    const onToast = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ message: string }>).detail;
+      if (detail?.message) {
+        setToast({ message: detail.message });
+      }
+    };
+    window.addEventListener("fixplease-toast", onToast);
+    return () => window.removeEventListener("fixplease-toast", onToast);
+  }, []);
+
   const openAdminCabinet = () => {
     setMode("admin");
     setSettingsOpen(false);

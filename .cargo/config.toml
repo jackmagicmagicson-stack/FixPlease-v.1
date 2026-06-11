@@ -1,0 +1,4 @@
+# LAN/server builds: crates.io can be slow; increase timeout.
+[http]
+timeout = 300
+multiplexing = false

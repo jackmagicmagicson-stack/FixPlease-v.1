@@ -9,7 +9,11 @@ import {
 } from "react";
 import { api } from "../api";
 import { getLastReadAt, markTicketRead } from "../messageReadState";
-import { getActiveHistoryEntries, upsertTicketHistory } from "../ticketHistory";
+import {
+  getActiveHistoryEntries,
+  historyEntryToTicket,
+  upsertTicketHistory,
+} from "../ticketHistory";
 import { subscribe } from "../ws";
 import type { Ticket, TicketMessage } from "../types";
 
@@ -52,8 +56,7 @@ export function EmployeeStatusProvider({ children }: { children: ReactNode }) {
       const messages = await api.messages(ticket.id);
       setUnreadCount(countUnread(messages, ticket.id));
     } catch {
-      setActiveTicket(null);
-      setUnreadCount(0);
+      setActiveTicket(historyEntryToTicket(active));
     }
   }, []);
 
@@ -70,7 +73,9 @@ export function EmployeeStatusProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    return subscribe((ev) => {
+    const onPoll = () => refresh();
+    window.addEventListener("fixplease-ws-poll", onPoll);
+    const unsub = subscribe((ev) => {
       if (
         ev.type === "ticket_updated" ||
         ev.type === "message_created" ||
@@ -79,6 +84,10 @@ export function EmployeeStatusProvider({ children }: { children: ReactNode }) {
         refresh();
       }
     });
+    return () => {
+      window.removeEventListener("fixplease-ws-poll", onPoll);
+      unsub();
+    };
   }, [refresh]);
 
   const value = useMemo(

@@ -4,7 +4,19 @@ use tauri::{
     AppHandle, Manager, WindowEvent,
 };
 use tauri_plugin_updater::UpdaterExt;
+use tokio_tungstenite::Connector;
 use url::Url;
+
+fn websocket_plugin() -> impl tauri::plugin::Plugin<tauri::Wry> {
+    let tls = native_tls::TlsConnector::builder()
+        .danger_accept_invalid_certs(true)
+        .danger_accept_invalid_hostnames(true)
+        .build()
+        .expect("websocket tls connector");
+    tauri_plugin_websocket::Builder::new()
+        .tls_connector(Connector::NativeTls(tls))
+        .build()
+}
 
 #[tauri::command]
 async fn check_and_install_update(app: AppHandle, server_url: String) -> Result<String, String> {
@@ -49,6 +61,32 @@ fn hide_main_window(app: &AppHandle) {
     }
 }
 
+#[cfg(windows)]
+fn ensure_ca_installed(app: &AppHandle) {
+    let Ok(res_dir) = app.path().resource_dir() else {
+        return;
+    };
+    let ca = res_dir.join("certs").join("fixplease-ca.cer");
+    if !ca.is_file() {
+        return;
+    }
+    let check = std::process::Command::new("certutil")
+        .args(["-store", "Root"])
+        .output();
+    if let Ok(out) = check {
+        let text = String::from_utf8_lossy(&out.stdout);
+        if text.contains("FixPlease LAN CA") {
+            return;
+        }
+    }
+    let Some(path) = ca.to_str() else {
+        return;
+    };
+    let _ = std::process::Command::new("certutil")
+        .args(["-addstore", "-f", "Root", path])
+        .status();
+}
+
 fn ensure_lan_no_proxy() {
     const LAN: &str = "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1,localhost,<local>";
     for key in ["NO_PROXY", "no_proxy"] {
@@ -69,10 +107,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(websocket_plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            #[cfg(windows)]
+            ensure_ca_installed(app.handle());
             let show_item = MenuItem::with_id(app, "show", "Показать FixPlease", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Завершить", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_item, &quit_item])?;
