@@ -34,6 +34,7 @@ export interface Ticket {
   closure_type: ClosureType | null;
   closure_reason: string | null;
   assigned_admin_id: string | null;
+  assigned_admin_name?: string | null;
   is_priority: boolean;
   is_escalated: boolean;
   created_at: string;
@@ -58,6 +59,13 @@ export interface Attachment {
   filename: string;
   mime_type: string;
   size_bytes: number;
+  created_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  display_name: string;
+  is_super_admin: boolean;
   created_at: string;
 }
 

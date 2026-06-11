@@ -6,7 +6,7 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{admins, error::ApiError, state::AppState};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -44,6 +44,25 @@ pub fn verify_token(state: &AppState, token: &str) -> Result<Claims, ApiError> {
 }
 
 pub struct AdminAuth(pub Claims);
+
+pub struct SuperAdminAuth(pub Claims);
+
+impl FromRequestParts<AppState> for SuperAdminAuth {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let AdminAuth(claims) = AdminAuth::from_request_parts(parts, state).await?;
+        if !admins::is_super_admin(&state.db, claims.sub).await? {
+            return Err(ApiError::Forbidden(
+                "доступ только для главного администратора".into(),
+            ));
+        }
+        Ok(SuperAdminAuth(claims))
+    }
+}
 
 impl FromRequestParts<AppState> for AdminAuth {
     type Rejection = ApiError;

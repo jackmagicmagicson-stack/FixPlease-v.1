@@ -12,15 +12,17 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
+    admins::{self, AdminUser},
     attachments::{get_attachment, save_attachment},
-    auth::{issue_token, verify_password, AdminAuth},
+    auth::{issue_token, verify_password, AdminAuth, SuperAdminAuth},
     error::{ApiError, ApiResult},
     semver,
     models::{
         AppSettings, AuthorRole, CategoryTemplate, CloseRequest, CreateCategoryRequest,
-        CreateTicketRequest, LoginRequest, LoginResponse, MessageRequest, PurgeClosedRequest,
-        PurgeClosedResponse, RejectRequest, TicketStatus, UpdateSettingsRequest,
-        UpdateTicketRequest, UpsertTemplateRequest, VersionResponse,
+        CreateAdminRequest, CreateTicketRequest, LoginRequest, LoginResponse, MessageRequest,
+        PurgeClosedRequest, PurgeClosedResponse, RejectRequest, TicketStatus,
+        UpdateAdminRequest, UpdateSettingsRequest, UpdateTicketRequest, UpsertTemplateRequest,
+        VersionResponse,
     },
     stats::compute_stats,
     state::AppState,
@@ -54,6 +56,11 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/version", get(version))
         .route("/v1/updater/{target}/{arch}/{current}", get(updater_manifest))
         .route("/v1/auth/login", post(login))
+        .route("/v1/auth/me", get(me))
+        .route("/v1/admins", get(list_admins_handler))
+        .route("/v1/admins", post(create_admin_handler))
+        .route("/v1/admins/{id}", put(update_admin_handler))
+        .route("/v1/admins/{id}", delete(delete_admin_handler))
         .route("/v1/categories", get(list_categories_handler))
         .route("/v1/categories", post(create_category_handler))
         .route("/v1/categories/{id}/templates", get(list_templates_handler))
@@ -142,22 +149,55 @@ async fn version(State(state): State<AppState>) -> ApiResult<Json<VersionRespons
 }
 
 async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>) -> ApiResult<Json<LoginResponse>> {
-    let admin: Option<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT id, display_name, password_hash FROM admins ORDER BY created_at LIMIT 1",
-    )
-    .fetch_optional(&state.db)
-    .await?;
-
-    let (id, name, hash) = admin.ok_or_else(|| ApiError::Unauthorized("no admin configured".into()))?;
+    let (id, name, hash, is_super_admin) =
+        admins::find_admin_for_login(&state.db, &req.display_name).await?;
     if !verify_password(&hash, &req.password).await {
-        return Err(ApiError::Unauthorized("invalid password".into()));
+        return Err(ApiError::Unauthorized("неверное имя или пароль".into()));
     }
     let token = issue_token(&state, id, &name)?;
     Ok(Json(LoginResponse {
         token,
         admin_id: id,
         display_name: name,
+        is_super_admin,
     }))
+}
+
+async fn me(AdminAuth(claims): AdminAuth, State(state): State<AppState>) -> ApiResult<Json<AdminUser>> {
+    Ok(Json(admins::get_admin_profile(&state.db, claims.sub).await?))
+}
+
+async fn list_admins_handler(
+    SuperAdminAuth(_): SuperAdminAuth,
+    State(state): State<AppState>,
+) -> ApiResult<Json<Vec<AdminUser>>> {
+    Ok(Json(admins::list_admins(&state.db).await?))
+}
+
+async fn create_admin_handler(
+    SuperAdminAuth(_): SuperAdminAuth,
+    State(state): State<AppState>,
+    Json(req): Json<CreateAdminRequest>,
+) -> ApiResult<Json<AdminUser>> {
+    Ok(Json(admins::create_admin(&state.db, req).await?))
+}
+
+async fn update_admin_handler(
+    SuperAdminAuth(_): SuperAdminAuth,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateAdminRequest>,
+) -> ApiResult<Json<AdminUser>> {
+    Ok(Json(admins::update_admin(&state.db, id, req).await?))
+}
+
+async fn delete_admin_handler(
+    SuperAdminAuth(claims): SuperAdminAuth,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<impl IntoResponse> {
+    admins::delete_admin(&state.db, id, claims.sub).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn list_categories_handler(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {

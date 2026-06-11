@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Archive, ClipboardList, Loader2 } from "lucide-react";
+import { Archive, ClipboardList, Loader2, PlusCircle } from "lucide-react";
 import { api } from "../api";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EmptyState } from "../components/EmptyState";
+import { useEmployeeStatus } from "../components/EmployeeStatusProvider";
+import { useInterfacePrefs } from "../components/InterfacePrefsProvider";
 import { PageHeader } from "../components/PageHeader";
 import { TicketListItem } from "../components/TicketListItem";
 import { TicketView } from "../components/TicketView";
@@ -19,7 +21,15 @@ import type { Attachment, Ticket, TicketMessage } from "../types";
 
 type ViewTab = "active" | "history";
 
-export function TrackTicket() {
+interface Props {
+  onCreateTicket?: () => void;
+}
+
+export function TrackTicket({ onCreateTicket }: Props) {
+  const { prefs } = useInterfacePrefs();
+  const enhanced = prefs.employeeUxEnhanced;
+  const { markCurrentRead, refresh: refreshEmployeeStatus } = useEmployeeStatus();
+
   const [tab, setTab] = useState<ViewTab>("active");
   const [historyVersion, setHistoryVersion] = useState(0);
   const [ticket, setTicket] = useState<Ticket | null>(null);
@@ -40,9 +50,15 @@ export function TrackTicket() {
       const t = await api.ticket(id);
       upsertTicketHistory(t);
       saveLastTicket(t);
+      const msgs = await api.messages(id);
+      const atts = await api.attachments(id);
       setTicket(t);
-      setMessages(await api.messages(id));
-      setAttachments(await api.attachments(id));
+      setMessages(msgs);
+      setAttachments(atts);
+      if (enhanced) {
+        markCurrentRead(id, msgs);
+        refreshEmployeeStatus();
+      }
       refreshHistory();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -50,7 +66,7 @@ export function TrackTicket() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enhanced, markCurrentRead, refreshEmployeeStatus]);
 
   const syncHistoryStatuses = useCallback(async () => {
     const entries = getTicketHistory();
@@ -60,7 +76,7 @@ export function TrackTicket() {
           const t = await api.ticket(e.id);
           upsertTicketHistory(t);
         } catch {
-          /* заявка удалена на сервере — оставляем локальную запись */
+          /* заявка удалена на сервере */
         }
       }),
     );
@@ -113,6 +129,30 @@ export function TrackTicket() {
     });
   }, [ticket, loadTicket]);
 
+  const searchByNumber = useCallback(
+    async (num: number) => {
+      if (!Number.isFinite(num) || num <= 0) {
+        setSearchError("Введите корректный номер заявки");
+        return;
+      }
+      setSearchError("");
+      setLoading(true);
+      try {
+        const t = await api.ticketByNumber(num);
+        upsertTicketHistory(t);
+        saveLastTicket(t);
+        setTab(t.status === "closed" ? "history" : "active");
+        setSelectedHistoryId(t.status === "closed" ? t.id : null);
+        await loadTicket(t.id);
+      } catch {
+        setSearchError("Заявка не найдена");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadTicket],
+  );
+
   const clearHistory = () => {
     clearTicketHistory();
     setSelectedHistoryId(null);
@@ -129,30 +169,156 @@ export function TrackTicket() {
     await loadTicket(ticket.id);
   };
 
-  const searchByNumber = async () => {
-    const num = parseInt(searchNumber.trim(), 10);
-    if (!Number.isFinite(num) || num <= 0) {
-      setSearchError("Введите корректный номер заявки");
-      return;
-    }
-    setSearchError("");
-    setLoading(true);
-    try {
-      const t = await api.ticketByNumber(num);
-      upsertTicketHistory(t);
-      saveLastTicket(t);
-      setTab(t.status === "closed" ? "history" : "active");
-      setSelectedHistoryId(t.status === "closed" ? t.id : null);
-      await loadTicket(t.id);
-    } catch {
-      setSearchError("Заявка не найдена");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const createCta =
+    enhanced && onCreateTicket ? (
+      <button type="button" className="btn btn-primary" onClick={onCreateTicket}>
+        <PlusCircle size={16} strokeWidth={2} aria-hidden />
+        Создать заявку
+      </button>
+    ) : undefined;
+
+  const activeContent = (
+    <>
+      {loading && !ticket && (
+        <EmptyState
+          icon={Loader2}
+          title="Загрузка заявки"
+          description="Получаем актуальный статус с сервера…"
+          spinning
+        />
+      )}
+      {!loading && !ticket && !error && (
+        <EmptyState
+          icon={ClipboardList}
+          title="Нет активных заявок"
+          description="Создайте новую заявку — администратор увидит её в очереди."
+          action={createCta}
+        />
+      )}
+      {ticket && (
+        <TicketView
+          ticket={ticket}
+          messages={messages}
+          attachments={attachments}
+          onRefresh={refreshCurrentTicket}
+          error={error}
+        />
+      )}
+    </>
+  );
+
+  const historyContent = (
+    <>
+      {closedEntries.length === 0 ? (
+        <EmptyState
+          icon={Archive}
+          title="История пуста"
+          description="Закрытые заявки появятся здесь после завершения обращений."
+        />
+      ) : enhanced ? (
+        <div className="employee-track-split">
+          <ul className="ticket-list ticket-list-cards history-list employee-track-list">
+            {closedEntries.map((e) => (
+              <TicketListItem
+                key={e.id}
+                ticket={{
+                  id: e.id,
+                  public_number: e.public_number,
+                  status: e.status,
+                  closure_type: null,
+                  row_label: e.row_label,
+                  desk_label: e.desk_label,
+                  description: e.description,
+                  updated_at: e.closed_at ?? e.updated_at,
+                  is_escalated: false,
+                  is_priority: false,
+                }}
+                selected={selectedHistoryId === e.id}
+                showImportance={false}
+                onClick={() => {
+                  setSelectedHistoryId(e.id);
+                  loadTicket(e.id);
+                }}
+              />
+            ))}
+          </ul>
+          <div className="employee-track-detail">
+            {selectedHistoryId && ticket ? (
+              <TicketView
+                ticket={ticket}
+                messages={messages}
+                attachments={attachments}
+                onRefresh={refreshCurrentTicket}
+                error={error}
+              />
+            ) : (
+              <EmptyState
+                icon={Archive}
+                title="Выберите заявку"
+                description="Нажмите на заявку в списке слева, чтобы увидеть детали."
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <ul className="ticket-list ticket-list-cards history-list">
+            {closedEntries.map((e) => (
+              <TicketListItem
+                key={e.id}
+                ticket={{
+                  id: e.id,
+                  public_number: e.public_number,
+                  status: e.status,
+                  closure_type: null,
+                  row_label: e.row_label,
+                  desk_label: e.desk_label,
+                  description: e.description,
+                  updated_at: e.closed_at ?? e.updated_at,
+                  is_escalated: false,
+                  is_priority: false,
+                }}
+                selected={selectedHistoryId === e.id}
+                showImportance={false}
+                onClick={() => {
+                  setSelectedHistoryId(e.id);
+                  loadTicket(e.id);
+                }}
+              />
+            ))}
+          </ul>
+          {selectedHistoryId && ticket && (
+            <div className="history-detail">
+              <TicketView
+                ticket={ticket}
+                messages={messages}
+                attachments={attachments}
+                onRefresh={refreshCurrentTicket}
+                error={error}
+              />
+            </div>
+          )}
+        </>
+      )}
+
+      {closedEntries.length > 0 && (
+        <section className="maintenance-section">
+          <h4 className="block-title">Очистка</h4>
+          <p className="hint">
+            Удаляет список истории только на этом компьютере. Заявки на сервере не затрагиваются.
+          </p>
+          <ConfirmAction
+            label="Очистить историю"
+            confirmText="Список истории исчезнет только на этом компьютере. Заявки на сервере останутся."
+            onConfirm={clearHistory}
+          />
+        </section>
+      )}
+    </>
+  );
 
   return (
-    <div className="card page-card page-card-wide">
+    <div className={`card page-card page-card-wide${enhanced ? " track-ticket-enhanced" : ""}`}>
       <PageHeader
         title="Мои заявки"
         lead="Активная заявка обновляется сама. История — закрытые обращения с этого компьютера."
@@ -167,9 +333,14 @@ export function TrackTicket() {
             value={searchNumber}
             onChange={(e) => setSearchNumber(e.target.value)}
             placeholder="Например: 42"
-            onKeyDown={(e) => e.key === "Enter" && searchByNumber()}
+            onKeyDown={(e) => e.key === "Enter" && searchByNumber(parseInt(searchNumber, 10))}
           />
-          <button type="button" className="btn btn-primary" onClick={searchByNumber} disabled={loading}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => searchByNumber(parseInt(searchNumber, 10))}
+            disabled={loading}
+          >
             Найти
           </button>
         </div>
@@ -196,98 +367,22 @@ export function TrackTicket() {
         </button>
       </nav>
 
-      {tab === "active" && (
-        <>
-          {loading && !ticket && (
-            <EmptyState
-              icon={Loader2}
-              title="Загрузка заявки"
-              description="Получаем актуальный статус с сервера…"
-              spinning
-            />
-          )}
-          {!loading && !ticket && !error && (
-            <EmptyState
-              icon={ClipboardList}
-              title="Нет активных заявок"
-              description="Создайте новую заявку — администратор увидит её в очереди."
-            />
-          )}
-          {ticket && (
-            <TicketView
-              ticket={ticket}
-              messages={messages}
-              attachments={attachments}
-              onRefresh={refreshCurrentTicket}
-              error={error}
-            />
-          )}
-        </>
-      )}
+      {tab === "active" &&
+        (enhanced && ticket ? (
+          <div className="employee-track-split employee-track-active">
+            <aside className="employee-track-sidebar">
+              <div className="employee-track-sidebar-card">
+                <p className="block-title">Активная заявка</p>
+                <p className="hint">#{ticket.public_number}</p>
+              </div>
+            </aside>
+            <div className="employee-track-detail">{activeContent}</div>
+          </div>
+        ) : (
+          activeContent
+        ))}
 
-      {tab === "history" && (
-        <>
-          {closedEntries.length === 0 ? (
-            <EmptyState
-              icon={Archive}
-              title="История пуста"
-              description="Закрытые заявки появятся здесь после завершения обращений."
-            />
-          ) : (
-            <ul className="ticket-list ticket-list-cards history-list">
-              {closedEntries.map((e) => (
-                <TicketListItem
-                  key={e.id}
-                  ticket={{
-                    id: e.id,
-                    public_number: e.public_number,
-                    status: e.status,
-                    closure_type: null,
-                    row_label: e.row_label,
-                    desk_label: e.desk_label,
-                    description: e.description,
-                    updated_at: e.closed_at ?? e.updated_at,
-                    is_escalated: false,
-                    is_priority: false,
-                  }}
-                  selected={selectedHistoryId === e.id}
-                  showImportance={false}
-                  onClick={() => {
-                    setSelectedHistoryId(e.id);
-                    loadTicket(e.id);
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-
-          {selectedHistoryId && ticket && (
-            <div className="history-detail">
-              <TicketView
-                ticket={ticket}
-                messages={messages}
-                attachments={attachments}
-                onRefresh={refreshCurrentTicket}
-                error={error}
-              />
-            </div>
-          )}
-
-          {closedEntries.length > 0 && (
-            <section className="maintenance-section">
-              <h4 className="block-title">Очистка</h4>
-              <p className="hint">
-                Удаляет список истории только на этом компьютере. Заявки на сервере не затрагиваются.
-              </p>
-              <ConfirmAction
-                label="Очистить историю"
-                confirmText="Список истории исчезнет только на этом компьютере. Заявки на сервере останутся."
-                onConfirm={clearHistory}
-              />
-            </section>
-          )}
-        </>
-      )}
+      {tab === "history" && historyContent}
     </div>
   );
 }

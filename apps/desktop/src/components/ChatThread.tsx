@@ -2,6 +2,7 @@ import { MessageCircle, Send, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../constants";
+import { AttachmentImage } from "./AttachmentImage";
 import { EmptyState } from "./EmptyState";
 import type { Attachment, TicketMessage } from "../types";
 
@@ -62,6 +63,11 @@ function isImageFile(file: File): boolean {
   return file.type.startsWith("image/");
 }
 
+function isImageAttachment(a: Attachment): boolean {
+  if (a.mime_type.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(a.filename);
+}
+
 export function ChatThread({
   ticketId,
   ticketClosed,
@@ -87,7 +93,7 @@ export function ChatThread({
     const items: TimelineItem[] = [
       ...messages.map((m) => ({ kind: "message" as const, at: m.created_at, data: m })),
       ...attachments
-        .filter((a) => a.mime_type.startsWith("image/"))
+        .filter(isImageAttachment)
         .map((a) => ({
           kind: "attachment" as const,
           at: a.created_at,
@@ -275,11 +281,10 @@ export function ChatThread({
                   className={`chat-bubble-row chat-bubble-row-${isOwn ? "own" : "other"}`}
                 >
                   <div className={`chat-bubble chat-bubble-image chat-bubble-${item.side === "admin" ? "admin" : "employee"}`}>
-                    <img
-                      src={api.attachmentUrl(att.id)}
+                    <AttachmentImage
+                      attachmentId={att.id}
                       alt={att.filename}
                       className="chat-image"
-                      loading="lazy"
                     />
                   </div>
                   <div className="chat-bubble-meta">

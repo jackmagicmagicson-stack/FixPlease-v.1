@@ -1,4 +1,6 @@
+import { setAdminProfile } from "./adminSession";
 import type {
+  AdminUser,
   Attachment,
   Category,
   CategoryTemplate,
@@ -64,7 +66,10 @@ export function getServerUrl() {
 export function setAdminToken(token: string | null) {
   adminToken = token;
   if (token) localStorage.setItem("admin_token", token);
-  else localStorage.removeItem("admin_token");
+  else {
+    localStorage.removeItem("admin_token");
+    setAdminProfile(null);
+  }
 }
 
 export function getAdminToken() {
@@ -115,16 +120,40 @@ export const api = {
   },
   version: () =>
     request<{ min_client_version: string; api_version: string }>("/v1/version"),
-  login: (password: string) =>
-    request<{ token: string; admin_id: string; display_name: string }>(
-      "/v1/auth/login",
-      { method: "POST", body: JSON.stringify({ password }) },
-    ),
+  login: (displayName: string, password: string) =>
+    request<{
+      token: string;
+      admin_id: string;
+      display_name: string;
+      is_super_admin: boolean;
+    }>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ display_name: displayName, password }),
+    }),
+  me: () => request<AdminUser>("/v1/auth/me", {}, true),
+  listAdmins: () => request<AdminUser[]>("/v1/admins", {}, true),
+  createAdmin: (data: { display_name: string; password: string }) =>
+    request<AdminUser>("/v1/admins", { method: "POST", body: JSON.stringify(data) }, true),
+  updateAdmin: (
+    id: string,
+    data: { display_name?: string; password?: string },
+  ) =>
+    request<AdminUser>(`/v1/admins/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }, true),
+  deleteAdmin: (id: string) =>
+    request<void>(`/v1/admins/${id}`, { method: "DELETE" }, true),
   /** Проверяет, что сохранённый токен ещё действителен на текущем сервере. */
   validateAdminSession: async () => {
     if (!adminToken) return false;
     try {
-      await request("/v1/settings", {}, true);
+      const profile = await request<AdminUser>("/v1/auth/me", {}, true);
+      setAdminProfile({
+        admin_id: profile.id,
+        display_name: profile.display_name,
+        is_super_admin: profile.is_super_admin,
+      });
       return true;
     } catch {
       setAdminToken(null);
@@ -223,6 +252,15 @@ export const api = {
     });
   },
   attachmentUrl: (id: string) => `${baseUrl}/v1/attachments/${id}`,
+
+  /** Загрузка вложения через appFetch (нужно для превью в Tauri / HTTPS LAN). */
+  fetchAttachmentBlob: async (id: string) => {
+    const res = await appFetch(`${baseUrl}/v1/attachments/${id}`);
+    if (!res.ok) {
+      throw new Error("Не удалось загрузить вложение");
+    }
+    return res.blob();
+  },
   stats: (from?: string, to?: string) => {
     const q = new URLSearchParams();
     if (from) q.set("from", from);

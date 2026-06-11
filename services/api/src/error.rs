@@ -15,6 +15,8 @@ pub enum ApiError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
+    #[error("{0}")]
+    Forbidden(String),
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -26,6 +28,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized(m) => (StatusCode::UNAUTHORIZED, m.clone()),
             ApiError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
+            ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m.clone()),
             ApiError::Internal(e) => {
                 tracing::error!("internal error: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error".into())

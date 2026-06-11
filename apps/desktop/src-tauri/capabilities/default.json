@@ -5,8 +5,41 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
     "notification:default",
     "updater:default",
+    "dialog:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "**" }],
+      "deny": [
+        "$EXE/**",
+        "$RESOURCE/**",
+        "$RUNTIME/**",
+        "**/Windows/**",
+        "**/WINDOWS/**",
+        "**/Program Files/**",
+        "**/Program Files (x86)/**",
+        "**/ProgramData/**",
+        "**/System Volume Information/**",
+        "**/$Recycle.Bin/**",
+        "**/Recovery/**",
+        "**/Boot/**",
+        "**/etc/**",
+        "**/sys/**",
+        "**/proc/**",
+        "**/dev/**",
+        "**/bin/**",
+        "**/sbin/**",
+        "**/usr/**",
+        "**/System/**",
+        "**/Library/Apple/**"
+      ]
+    },
     {
       "identifier": "http:default",
       "allow": [

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -28,12 +30,42 @@ pub async fn list_templates(pool: &PgPool, category_id: Uuid) -> ApiResult<Vec<C
     .map_err(Into::into)
 }
 
+async fn attach_admin_names(pool: &PgPool, tickets: &mut [Ticket]) -> ApiResult<()> {
+    let ids: Vec<Uuid> = tickets
+        .iter()
+        .filter_map(|t| t.assigned_admin_id)
+        .collect();
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let rows: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, display_name FROM admins WHERE id = ANY($1)")
+            .bind(&ids)
+            .fetch_all(pool)
+            .await?;
+    let map: HashMap<Uuid, String> = rows.into_iter().collect();
+    for ticket in tickets.iter_mut() {
+        if let Some(id) = ticket.assigned_admin_id {
+            ticket.assigned_admin_name = map.get(&id).cloned();
+        }
+    }
+    Ok(())
+}
+
+async fn with_admin_name(pool: &PgPool, ticket: Ticket) -> ApiResult<Ticket> {
+    let mut ticket = ticket;
+    attach_admin_names(pool, std::slice::from_mut(&mut ticket)).await?;
+    Ok(ticket)
+}
+
 pub async fn get_ticket(pool: &PgPool, id: Uuid) -> ApiResult<Ticket> {
-    sqlx::query_as::<_, Ticket>("SELECT * FROM tickets WHERE id = $1")
+    let mut ticket = sqlx::query_as::<_, Ticket>("SELECT * FROM tickets WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await?
-        .ok_or_else(|| ApiError::NotFound("ticket not found".into()))
+        .ok_or_else(|| ApiError::NotFound("ticket not found".into()))?;
+    attach_admin_names(pool, std::slice::from_mut(&mut ticket)).await?;
+    Ok(ticket)
 }
 
 pub async fn get_ticket_by_number(pool: &PgPool, public_number: i64) -> ApiResult<Ticket> {
@@ -111,6 +143,7 @@ pub async fn list_tickets_admin(
         tickets.retain(|t| t.category_id == c);
     }
     sort_tickets(&mut tickets, sort);
+    attach_admin_names(pool, &mut tickets).await?;
     Ok(tickets)
 }
 
@@ -269,6 +302,7 @@ pub async fn take_ticket(
 
     match result {
         Some(ticket) => {
+            let ticket = with_admin_name(pool, ticket).await?;
             publish(events, &WsEvent::TicketUpdated { ticket: ticket.clone() });
             Ok(ticket)
         }
@@ -297,6 +331,7 @@ pub async fn resolve_ticket(pool: &PgPool, events: &EventSender, id: Uuid) -> Ap
     .await?
     .ok_or_else(|| ApiError::BadRequest("cannot resolve ticket".into()))?;
 
+    let ticket = with_admin_name(pool, ticket).await?;
     publish(events, &WsEvent::TicketUpdated { ticket: ticket.clone() });
     Ok(ticket)
 }
@@ -336,6 +371,7 @@ pub async fn close_ticket(
     .await?
     .ok_or_else(|| ApiError::BadRequest("ticket already closed or not found".into()))?;
 
+    let ticket = with_admin_name(pool, ticket).await?;
     publish(events, &WsEvent::TicketUpdated { ticket: ticket.clone() });
     Ok(ticket)
 }

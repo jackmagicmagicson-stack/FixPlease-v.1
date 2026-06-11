@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { MAX_ATTACHMENTS } from "../constants";
 import { clearDraftId, getDraftId, setDraftId } from "../draftStorage";
+import { AttachmentFileList } from "../components/AttachmentFileList";
+import type { ToastData } from "../components/Toast";
 import { FormSection } from "../components/FormSection";
+import { FormStepper } from "../components/FormStepper";
+import { useInterfacePrefs } from "../components/InterfacePrefsProvider";
 import { PageHeader } from "../components/PageHeader";
+import { categoryIcon, computeFormStep, getCategoryHints } from "../employeeUx";
 import {
   getLastLocation,
   getRememberLocation,
@@ -16,9 +21,13 @@ import type { Category, CategoryTemplate, Ticket } from "../types";
 
 interface Props {
   onCreated: (t: Ticket) => void;
+  onToast?: (toast: ToastData) => void;
 }
 
-export function CreateTicket({ onCreated }: Props) {
+export function CreateTicket({ onCreated, onToast }: Props) {
+  const { prefs } = useInterfacePrefs();
+  const enhanced = prefs.employeeUxEnhanced;
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState("");
@@ -35,6 +44,10 @@ export function CreateTicket({ onCreated }: Props) {
   const [rememberPlace, setRememberPlace] = useState(getRememberLocation);
   const [draftId, setDraftIdState] = useState<string | null>(() => getDraftId());
   const [pendingDraftBanner, setPendingDraftBanner] = useState(false);
+  const rowRef = useRef<HTMLInputElement>(null);
+
+  const currentStep = computeFormStep(row, desk, categoryId, description);
+  const selectedCategory = categories.find((c) => c.id === categoryId);
 
   const loadCategories = useCallback(async () => {
     setCategoriesLoading(true);
@@ -122,6 +135,40 @@ export function CreateTicket({ onCreated }: Props) {
     }
     api.templates(categoryId).then(setTemplates).catch(() => setTemplates([]));
   }, [categoryId]);
+
+  const addFiles = useCallback((picked: File[]) => {
+    if (picked.length === 0) return;
+    setFiles((prev) => [...prev, ...picked].slice(0, MAX_ATTACHMENTS));
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  useEffect(() => {
+    if (!enhanced || row.trim()) return;
+    rowRef.current?.focus();
+  }, [enhanced, row]);
+
+  useEffect(() => {
+    if (!enhanced) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageItems: File[] = [];
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageItems.push(file);
+        }
+      }
+      if (imageItems.length === 0) return;
+      e.preventDefault();
+      addFiles(imageItems);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [enhanced, addFiles]);
 
   const applyTemplate = (t: CategoryTemplate) => {
     setDescription((d) => (d ? `${d}\n\n${t.body}` : t.body));
@@ -211,7 +258,15 @@ export function CreateTicket({ onCreated }: Props) {
         saveLastLocation(row, desk);
       }
       saveLastTicket(ticket);
-      setSuccess(`Заявка #${ticket.public_number} отправлена. Статус — во вкладке «Мои заявки».`);
+      if (enhanced && onToast) {
+        onToast({
+          message: `Заявка #${ticket.public_number} отправлена`,
+          actionLabel: "Открыть",
+          onAction: () => onCreated(ticket),
+        });
+      } else {
+        setSuccess(`Заявка #${ticket.public_number} отправлена. Статус — во вкладке «Мои заявки».`);
+      }
       onCreated(ticket);
       setDescription("");
       setFiles([]);
@@ -224,16 +279,27 @@ export function CreateTicket({ onCreated }: Props) {
     }
   };
 
-  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const stepperSteps = [
+    { num: 1, title: "Место", active: currentStep === 1, done: currentStep > 1 },
+    { num: 2, title: "Категория", active: currentStep === 2, done: currentStep > 2 },
+    { num: 3, title: "Описание", active: currentStep === 3, done: currentStep > 3 },
+    { num: 4, title: "Отправка", active: currentStep === 4, done: false },
+  ];
 
-  return (
-    <div className="card page-card">
-      <PageHeader
-        title="Новая заявка"
-        lead="Опишите проблему — администратор увидит её в очереди. Обычно достаточно 1–2 минут."
-      />
+  const actionButtons = (
+    <div className="action-bar action-bar-primary">
+      <button className="btn" disabled={loading} onClick={saveDraft}>
+        Сохранить черновик
+      </button>
+      <button className="btn btn-primary btn-lg" disabled={loading || !categoryId} onClick={submit}>
+        Отправить заявку
+      </button>
+    </div>
+  );
 
-      {activeTicket && (
+  const formBody = (
+    <>
+      {activeTicket && !enhanced && (
         <div className="info-banner">
           У вас уже есть активная заявка #{activeTicket.public_number}. Можно создать ещё одну, но
           проще следить за текущей во вкладке «Мои заявки».
@@ -263,7 +329,12 @@ export function CreateTicket({ onCreated }: Props) {
         <div className="form-grid-2">
           <div className="form-row">
             <label>Ряд</label>
-            <input value={row} onChange={(e) => setRow(e.target.value)} placeholder="3 ряд" />
+            <input
+              ref={rowRef}
+              value={row}
+              onChange={(e) => setRow(e.target.value)}
+              placeholder="3 ряд"
+            />
           </div>
           <div className="form-row">
             <label>Стол</label>
@@ -291,28 +362,50 @@ export function CreateTicket({ onCreated }: Props) {
           </div>
         )}
         {!categoriesLoading && !categoriesError && categories.length > 0 && (
-          <div className="category-picker" role="listbox" aria-label="Категория">
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                role="option"
-                aria-selected={categoryId === c.id}
-                className={`category-option${categoryId === c.id ? " selected" : ""}`}
-                onClick={() => setCategoryId(c.id)}
-              >
-                <span className="category-option-name">{c.name}</span>
-              </button>
-            ))}
+          <div
+            className={`category-picker${enhanced ? " category-picker-enhanced" : ""}`}
+            role="listbox"
+            aria-label="Категория"
+          >
+            {categories.map((c) => {
+              const Icon = enhanced ? categoryIcon(c.name) : null;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="option"
+                  aria-selected={categoryId === c.id}
+                  className={`category-option${categoryId === c.id ? " selected" : ""}`}
+                  onClick={() => setCategoryId(c.id)}
+                >
+                  {Icon && <Icon size={18} strokeWidth={2} className="category-option-icon" aria-hidden />}
+                  <span className="category-option-name">{c.name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
-        {selectedCategory && <p className="hint">Выбрано: {selectedCategory.name}</p>}
+        {selectedCategory && !enhanced && <p className="hint">Выбрано: {selectedCategory.name}</p>}
+        {enhanced && selectedCategory && (
+          <div className="category-hints">
+            <p className="category-hints-title">Перед отправкой проверьте:</p>
+            <ul className="category-hints-list">
+              {getCategoryHints(selectedCategory.name).map((hint) => (
+                <li key={hint}>{hint}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </FormSection>
 
       <FormSection
         step={3}
         title="Подробности"
-        hint="Чем точнее описание — тем быстрее помогут. Можно приложить скриншот."
+        hint={
+          enhanced
+            ? "Опишите проблему. Скриншот можно вставить через Ctrl+V."
+            : "Чем точнее описание — тем быстрее помогут. Можно приложить скриншот."
+        }
       >
         {templates.length > 0 && (
           <div className="form-row">
@@ -340,22 +433,39 @@ export function CreateTicket({ onCreated }: Props) {
             type="file"
             multiple
             accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx"
-            onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, MAX_ATTACHMENTS))}
+            onChange={(e) => {
+              addFiles(Array.from(e.target.files || []));
+              e.target.value = "";
+            }}
           />
-          {files.length > 0 && <p className="hint">{files.map((f) => f.name).join(", ")}</p>}
+          <AttachmentFileList files={files} onRemove={removeFile} />
+          {files.length >= MAX_ATTACHMENTS && (
+            <p className="hint">Достигнут лимит вложений ({MAX_ATTACHMENTS})</p>
+          )}
         </div>
       </FormSection>
 
-      <FormSection step={4} title="Отправка">
-        <div className="action-bar action-bar-primary">
-          <button className="btn" disabled={loading} onClick={saveDraft}>
-            Сохранить черновик
-          </button>
-          <button className="btn btn-primary btn-lg" disabled={loading || !categoryId} onClick={submit}>
-            Отправить заявку
-          </button>
+      {!enhanced && <FormSection step={4} title="Отправка">{actionButtons}</FormSection>}
+    </>
+  );
+
+  return (
+    <div className={`card page-card${enhanced ? " create-ticket-enhanced" : ""}`}>
+      <PageHeader
+        title="Новая заявка"
+        lead="Опишите проблему — администратор увидит её в очереди. Обычно достаточно 1–2 минут."
+      />
+
+      {enhanced ? (
+        <div className="create-ticket-layout">
+          <FormStepper steps={stepperSteps} />
+          <div className="create-ticket-main">{formBody}</div>
         </div>
-      </FormSection>
+      ) : (
+        formBody
+      )}
+
+      {enhanced && <div className="sticky-action-bar">{actionButtons}</div>}
     </div>
   );
 }

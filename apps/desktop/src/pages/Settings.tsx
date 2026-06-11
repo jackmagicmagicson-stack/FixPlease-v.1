@@ -8,22 +8,43 @@ import {
   setServerUrl,
 } from "../api";
 import { FormSection } from "../components/FormSection";
+import { useInterfacePrefs } from "../components/InterfacePrefsProvider";
 import { PageHeader } from "../components/PageHeader";
+import { SegmentedControl } from "../components/SegmentedControl";
 import {
   clearLastLocation,
   getLastLocation,
   hasSavedLocation,
   saveLastLocation,
 } from "../locationMemory";
+import { AboutProgram } from "../components/AboutProgram";
+import { AdminManagement } from "../components/AdminManagement";
+import { resetOnboarding } from "../onboardingState";
 import { checkForUpdates } from "../updater";
 
 interface Props {
   isAdmin: boolean;
+  isSuperAdmin?: boolean;
+  adminId?: string;
   onLogout: () => void;
   onServerSaved?: (ok: boolean) => void;
 }
 
-export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
+export function Settings({
+  isAdmin,
+  isSuperAdmin = false,
+  adminId,
+  onLogout,
+  onServerSaved,
+}: Props) {
+  const {
+    prefs,
+    setTheme,
+    setFontSize,
+    setBlockSize,
+    setAnimationsEnabled,
+    setEmployeeUxEnhanced,
+  } = useInterfacePrefs();
   const [url, setUrl] = useState(getServerUrl());
   const [row, setRow] = useState("");
   const [desk, setDesk] = useState("");
@@ -170,6 +191,91 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
       {updateMsg && <div className="info-banner">{updateMsg}</div>}
 
       <FormSection
+        title="Интерфейс"
+        hint="Настройки применяются сразу и сохраняются на этом устройстве"
+      >
+        <div className="form-row">
+          <label>Тема оформления</label>
+          <SegmentedControl
+            ariaLabel="Тема оформления"
+            value={prefs.theme}
+            onChange={setTheme}
+            options={[
+              { value: "light", label: "Светлая" },
+              { value: "dark", label: "Тёмная" },
+            ]}
+          />
+        </div>
+        <div className="form-row">
+          <label>Размер шрифта</label>
+          <SegmentedControl
+            ariaLabel="Размер шрифта"
+            value={prefs.fontSize}
+            onChange={setFontSize}
+            options={[
+              { value: "small", label: "Мелкий" },
+              { value: "medium", label: "Обычный" },
+              { value: "large", label: "Крупный" },
+            ]}
+          />
+        </div>
+        <div className="form-row">
+          <label>Размер блоков</label>
+          <SegmentedControl
+            ariaLabel="Размер блоков"
+            value={prefs.blockSize}
+            onChange={setBlockSize}
+            options={[
+              { value: "compact", label: "Компактный" },
+              { value: "comfortable", label: "Обычный" },
+              { value: "spacious", label: "Просторный" },
+            ]}
+          />
+        </div>
+        <div className="form-row">
+          <label>Анимация переходов</label>
+          <SegmentedControl
+            ariaLabel="Анимация переходов"
+            value={prefs.animationsEnabled ? "on" : "off"}
+            onChange={(v) => setAnimationsEnabled(v === "on")}
+            options={[
+              { value: "on", label: "Включена" },
+              { value: "off", label: "Выключена" },
+            ]}
+          />
+        </div>
+        <div className="form-row">
+          <label>Интерфейс сотрудника</label>
+          <SegmentedControl
+            ariaLabel="Интерфейс сотрудника"
+            value={prefs.employeeUxEnhanced ? "enhanced" : "classic"}
+            onChange={(v) => setEmployeeUxEnhanced(v === "enhanced")}
+            options={[
+              { value: "enhanced", label: "Новый" },
+              { value: "classic", label: "Классический" },
+            ]}
+          />
+        </div>
+        <p className="hint">
+          «Классический» откатывает шаги, липкие кнопки, виджет заявки в шапке и двухколоночный
+          просмотр — без переустановки приложения.
+        </p>
+        <div className="form-row">
+          <label>Приветствие</label>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              resetOnboarding();
+              window.dispatchEvent(new Event("fixplease-show-onboarding"));
+            }}
+          >
+            Показать приветствие снова
+          </button>
+        </div>
+      </FormSection>
+
+      <FormSection
         title="Подключение к серверу"
         hint={
           isAdmin
@@ -273,6 +379,10 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
         </button>
       </FormSection>
 
+      {isAdmin && isSuperAdmin && adminId && (
+        <AdminManagement currentAdminId={adminId} />
+      )}
+
       {isAdmin && (
         <>
           <FormSection title="Параметры очереди" hint="Влияют на всех администраторов">
@@ -326,6 +436,8 @@ export function Settings({ isAdmin, onLogout, onServerSaved }: Props) {
           </FormSection>
         </>
       )}
+
+      <AboutProgram />
 
       <div className="action-bar action-bar-primary">
         <button className="btn btn-primary" onClick={() => void save()}>

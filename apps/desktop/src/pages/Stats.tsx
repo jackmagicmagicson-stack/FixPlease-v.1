@@ -1,6 +1,8 @@
+import { Download } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { PageHeader } from "../components/PageHeader";
+import { exportStatsToExcel } from "../exportStats";
 import type { StatsResponse } from "../types";
 
 type Period = "day" | "week" | "month" | "custom";
@@ -59,6 +61,8 @@ export function Stats() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [error, setError] = useState("");
+  const [exportMsg, setExportMsg] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadStats = useCallback(async () => {
@@ -94,6 +98,17 @@ export function Stats() {
   }, [loadStats]);
 
   const customWaiting = period === "custom" && (!from.trim() || !to.trim());
+
+  const periodLabel =
+    period === "day"
+      ? "День"
+      : period === "week"
+        ? "Неделя"
+        : period === "month"
+          ? "Месяц"
+          : from && to
+            ? `${from} — ${to}`
+            : "Период";
 
   return (
     <div className="card page-card">
@@ -140,6 +155,33 @@ export function Stats() {
       )}
       {!loading && stats && !customWaiting && (
         <>
+          <div className="action-bar" style={{ marginBottom: "1rem" }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={exporting}
+              onClick={async () => {
+                setExportMsg("");
+                setExporting(true);
+                try {
+                  const result = await exportStatsToExcel(stats, periodLabel);
+                  if (result.saved && result.path) {
+                    setExportMsg(`Файл сохранён: ${result.path}`);
+                  } else if (result.saved) {
+                    setExportMsg("Файл скачан.");
+                  }
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              <Download size={16} strokeWidth={2} aria-hidden />
+              {exporting ? "Сохранение…" : "Экспорт в Excel"}
+            </button>
+            {exportMsg && <p className="hint" style={{ margin: 0 }}>{exportMsg}</p>}
+          </div>
           <div className="stats-grid">
             <div className="stat-box">
               <div className="value">{stats.total_tickets}</div>

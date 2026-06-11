@@ -1,4 +1,4 @@
-import { MapPin } from "lucide-react";
+import { MapPin, UserRound } from "lucide-react";
 import {
   importanceClass,
   importanceLabel,
@@ -18,6 +18,7 @@ export interface TicketListItemData {
   updated_at?: string;
   is_escalated?: boolean;
   is_priority?: boolean;
+  assigned_admin_name?: string | null;
 }
 
 interface Props {
@@ -61,6 +62,12 @@ export function TicketListItem({
       </div>
       <p className="ticket-card-desc">{ticket.description}</p>
       <div className="ticket-card-meta">
+        {ticket.assigned_admin_name && (
+          <span className="ticket-card-assignee">
+            <UserRound size={13} strokeWidth={2} aria-hidden />
+            {ticket.assigned_admin_name}
+          </span>
+        )}
         <span className="ticket-card-location">
           <MapPin size={13} strokeWidth={2} aria-hidden />
           {ticket.row_label}, {ticket.desk_label}

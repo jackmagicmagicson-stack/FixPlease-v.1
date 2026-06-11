@@ -1,20 +1,15 @@
-import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  ArrowLeft,
-  BarChart3,
-  BookOpen,
-  ClipboardList,
-  Inbox,
-  PlusCircle,
-  Settings as SettingsIcon,
-  Shield,
-} from "lucide-react";
+import { getAdminProfile } from "./adminSession";
 import { api, getAdminToken, setAdminToken } from "./api";
 import { checkForUpdates } from "./updater";
-import { AppLogo } from "./components/AppLogo";
-import { ConnectionBadge } from "./components/ConnectionBadge";
+import { AppHeader } from "./components/AppHeader";
+import { useEmployeeStatus } from "./components/EmployeeStatusProvider";
 import { GlassPageTransition } from "./components/GlassPageTransition";
+import { useInterfacePrefs } from "./components/InterfacePrefsProvider";
+import { Toast, type ToastData } from "./components/Toast";
+import { WelcomeOnboarding } from "./components/WelcomeOnboarding";
+import { WindowTitleBar } from "./components/WindowTitleBar";
+import { isOnboardingDone } from "./onboardingState";
 import { notifyWsEvent } from "./notify";
 import { subscribe } from "./ws";
 import { CreateTicket } from "./pages/CreateTicket";
@@ -30,34 +25,10 @@ import type { Ticket } from "./types";
 type EmployeeTab = "create" | "track";
 type AdminTab = "queue" | "reference" | "reports";
 
-function NavButton({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-  ghost,
-}: {
-  active?: boolean;
-  icon?: LucideIcon;
-  label: string;
-  onClick: () => void;
-  ghost?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`nav-btn${active ? " active" : ""}${ghost ? " btn-ghost" : ""}`}
-      onClick={onClick}
-    >
-      {Icon && <Icon size={16} strokeWidth={2} aria-hidden />}
-      <span>{label}</span>
-    </button>
-  );
-}
-
 export default function App() {
   const [mode, setMode] = useState<"employee" | "admin">("employee");
   const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminProfile, setAdminProfileState] = useState(() => getAdminProfile());
   const [employeeTab, setEmployeeTab] = useState<EmployeeTab>("create");
   const [adminTab, setAdminTab] = useState<AdminTab>("queue");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -67,6 +38,14 @@ export default function App() {
   const [queueCount, setQueueCount] = useState<number | null>(null);
   const [updateMsg, setUpdateMsg] = useState("");
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => mode === "employee" && !isOnboardingDone(),
+  );
+
+  const { prefs } = useInterfacePrefs();
+  const { activeTicket, unreadCount, refresh: refreshEmployeeStatus } = useEmployeeStatus();
+  const employeeUx = prefs.employeeUxEnhanced;
 
   useEffect(() => {
     let cancelled = false;
@@ -108,9 +87,13 @@ export default function App() {
     if (mode !== "admin") return;
     if (!getAdminToken()) {
       setAdminAuthed(false);
+      setAdminProfileState(null);
       return;
     }
-    api.validateAdminSession().then(setAdminAuthed);
+    api.validateAdminSession().then((ok) => {
+      setAdminAuthed(ok);
+      setAdminProfileState(ok ? getAdminProfile() : null);
+    });
   }, [mode]);
 
   useEffect(() => {
@@ -142,9 +125,18 @@ export default function App() {
   }, [mode, adminAuthed]);
 
   useEffect(() => {
-    const onUnauthorized = () => setAdminAuthed(false);
+    const onUnauthorized = () => {
+      setAdminAuthed(false);
+      setAdminProfileState(null);
+    };
     window.addEventListener("fixplease-admin-unauthorized", onUnauthorized);
     return () => window.removeEventListener("fixplease-admin-unauthorized", onUnauthorized);
+  }, []);
+
+  useEffect(() => {
+    const showOnboardingAgain = () => setShowOnboarding(true);
+    window.addEventListener("fixplease-show-onboarding", showOnboardingAgain);
+    return () => window.removeEventListener("fixplease-show-onboarding", showOnboardingAgain);
   }, []);
 
   const openAdminCabinet = () => {
@@ -159,6 +151,7 @@ export default function App() {
   const switchToEmployee = () => {
     setAdminToken(null);
     setAdminAuthed(false);
+    setAdminProfileState(null);
     setMode("employee");
     setSettingsOpen(false);
     setSelectedTicket(null);
@@ -166,7 +159,11 @@ export default function App() {
 
   if (versionBlocked) {
     return (
-      <div className="app-shell">
+      <div className="app-window">
+        <div className="app-chrome">
+          <WindowTitleBar />
+        </div>
+        <div className="app-shell">
         <div className="card page-card" style={{ margin: "2rem auto", maxWidth: 480 }}>
           <h2>Требуется обновление</h2>
           <p className="hint">
@@ -202,6 +199,7 @@ export default function App() {
             </a>
           </div>
         </div>
+        </div>
       </div>
     );
   }
@@ -217,111 +215,50 @@ export default function App() {
         : `admin-${adminTab}`;
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div className="app-brand">
-          <AppLogo />
-          <span className="mode-badge">{modeLabel}</span>
-          <ConnectionBadge ok={serverOk} />
+    <div className="app-window">
+      <div className="app-chrome">
+        <WindowTitleBar />
+        <div className="app-chrome-inner">
+          <AppHeader
+            mode={mode}
+            modeLabel={modeLabel}
+            serverOk={serverOk}
+            settingsOpen={settingsOpen}
+            adminAuthed={adminAuthed}
+            adminDisplayName={adminProfile?.display_name}
+            employeeTab={employeeTab}
+            adminTab={adminTab}
+            queueCount={queueCount}
+            employeeUxEnhanced={mode === "employee" && employeeUx}
+            activeTicket={mode === "employee" && employeeUx ? activeTicket : null}
+            unreadCount={unreadCount}
+            onActiveTicketClick={() => {
+              setEmployeeTab("track");
+              setSettingsOpen(false);
+            }}
+            onEmployeeTab={(tab) => {
+              setEmployeeTab(tab);
+              setSettingsOpen(false);
+            }}
+            onAdminTab={(tab) => {
+              setAdminTab(tab);
+              setSettingsOpen(false);
+              if (tab !== "queue") setSelectedTicket(null);
+            }}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenAdmin={openAdminCabinet}
+            onSwitchEmployee={switchToEmployee}
+          />
+
+          {!serverOk && (
+            <div className="error-banner banner-enter">
+              Не удалось подключиться к серверу. Откройте «Настройки» и проверьте адрес сервера.
+            </div>
+          )}
         </div>
+      </div>
 
-        <nav className="nav-primary" aria-label="Основные разделы">
-          {mode === "employee" && (
-            <>
-              <NavButton
-                active={employeeTab === "create" && !settingsOpen}
-                icon={PlusCircle}
-                label="Новая заявка"
-                onClick={() => {
-                  setEmployeeTab("create");
-                  setSettingsOpen(false);
-                }}
-              />
-              <NavButton
-                active={employeeTab === "track" && !settingsOpen}
-                icon={ClipboardList}
-                label="Мои заявки"
-                onClick={() => {
-                  setEmployeeTab("track");
-                  setSettingsOpen(false);
-                }}
-              />
-            </>
-          )}
-
-          {mode === "admin" && adminAuthed && (
-            <>
-              <NavButton
-                active={adminTab === "queue" && !settingsOpen}
-                icon={Inbox}
-                label={
-                  queueCount != null && queueCount > 0 ? `Очередь (${queueCount})` : "Очередь"
-                }
-                onClick={() => {
-                  setAdminTab("queue");
-                  setSettingsOpen(false);
-                }}
-              />
-              <NavButton
-                active={adminTab === "reference" && !settingsOpen}
-                icon={BookOpen}
-                label="Справочник"
-                onClick={() => {
-                  setAdminTab("reference");
-                  setSettingsOpen(false);
-                  setSelectedTicket(null);
-                }}
-              />
-              <NavButton
-                active={adminTab === "reports" && !settingsOpen}
-                icon={BarChart3}
-                label="Отчёты"
-                onClick={() => {
-                  setAdminTab("reports");
-                  setSettingsOpen(false);
-                }}
-              />
-            </>
-          )}
-        </nav>
-
-        <nav className="nav-secondary" aria-label="Дополнительно">
-          {mode === "employee" && (
-            <>
-              <NavButton
-                active={settingsOpen}
-                icon={SettingsIcon}
-                label="Настройки"
-                onClick={() => setSettingsOpen(true)}
-              />
-              <NavButton ghost icon={Shield} label="Админ" onClick={openAdminCabinet} />
-            </>
-          )}
-
-          {mode === "admin" && !adminAuthed && (
-            <NavButton ghost icon={ArrowLeft} label="Сотрудник" onClick={switchToEmployee} />
-          )}
-
-          {mode === "admin" && adminAuthed && (
-            <>
-              <NavButton
-                active={settingsOpen}
-                icon={SettingsIcon}
-                label="Настройки"
-                onClick={() => setSettingsOpen(true)}
-              />
-              <NavButton ghost icon={ArrowLeft} label="Сотрудник" onClick={switchToEmployee} />
-            </>
-          )}
-        </nav>
-      </header>
-
-      {!serverOk && (
-        <div className="error-banner banner-enter">
-          Не удалось подключиться к серверу. Откройте «Настройки» и проверьте адрес сервера.
-        </div>
-      )}
-
+      <div className="app-shell">
       <main className="app-main">
         <GlassPageTransition pageKey={pageKey}>
           {mode === "employee" && settingsOpen && (
@@ -330,25 +267,37 @@ export default function App() {
 
           {mode === "employee" && !settingsOpen && employeeTab === "create" && (
             <CreateTicket
+              onToast={setToast}
               onCreated={() => {
                 setEmployeeTab("track");
+                refreshEmployeeStatus();
               }}
             />
           )}
 
-          {mode === "employee" && !settingsOpen && employeeTab === "track" && <TrackTicket />}
+          {mode === "employee" && !settingsOpen && employeeTab === "track" && (
+            <TrackTicket onCreateTicket={() => setEmployeeTab("create")} />
+          )}
 
           {mode === "admin" && !adminAuthed && (
-            <AdminLogin onSuccess={() => setAdminAuthed(true)} />
+            <AdminLogin
+              onSuccess={() => {
+                setAdminAuthed(true);
+                setAdminProfileState(getAdminProfile());
+              }}
+            />
           )}
 
           {mode === "admin" && adminAuthed && settingsOpen && (
             <Settings
               isAdmin
+              isSuperAdmin={adminProfile?.is_super_admin}
+              adminId={adminProfile?.admin_id}
               onServerSaved={setServerOk}
               onLogout={() => {
                 setAdminAuthed(false);
                 setAdminToken(null);
+                setAdminProfileState(null);
               }}
             />
           )}
@@ -387,6 +336,20 @@ export default function App() {
           )}
         </GlassPageTransition>
       </main>
+      </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          actionLabel={toast.actionLabel}
+          onAction={toast.onAction}
+          onDismiss={() => setToast(null)}
+        />
+      )}
+
+      {showOnboarding && mode === "employee" && !versionBlocked && (
+        <WelcomeOnboarding onComplete={() => setShowOnboarding(false)} />
+      )}
     </div>
   );
 }

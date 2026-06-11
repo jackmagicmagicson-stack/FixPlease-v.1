@@ -84,6 +84,11 @@ export function TicketDetail({ ticketId, onUpdated }: Props) {
       {ticket && (
         <>
           <section className="content-block">
+            {ticket.assigned_admin_name && (
+              <p className="ticket-assignee-banner">
+                Ответственный: <strong>{ticket.assigned_admin_name}</strong>
+              </p>
+            )}
             <h3 className="block-title">Описание</h3>
             <p className="ticket-description">{ticket.description}</p>
             {ticket.status === "closed" && (

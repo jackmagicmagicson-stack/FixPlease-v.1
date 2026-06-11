@@ -60,6 +60,9 @@ pub struct Ticket {
     pub closure_type: Option<ClosureType>,
     pub closure_reason: Option<String>,
     pub assigned_admin_id: Option<Uuid>,
+    #[sqlx(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigned_admin_name: Option<String>,
     pub is_priority: bool,
     pub is_escalated: bool,
     pub created_at: DateTime<Utc>,
@@ -146,6 +149,7 @@ pub struct MessageRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
+    pub display_name: String,
     pub password: String,
 }
 
@@ -154,6 +158,19 @@ pub struct LoginResponse {
     pub token: String,
     pub admin_id: Uuid,
     pub display_name: String,
+    pub is_super_admin: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAdminRequest {
+    pub display_name: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAdminRequest {
+    pub display_name: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,3 +1,4 @@
+mod admins;
 mod attachments;
 mod auth;
 mod config;
@@ -60,6 +61,34 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
+const WORKER_ADMINS: &[(&str, &str)] = &[
+    ("Админ 1", "admin1"),
+    ("Админ 2", "admin2"),
+    ("Админ 3", "admin3"),
+];
+
+async fn seed_worker_admins(pool: &sqlx::PgPool) -> anyhow::Result<()> {
+    let workers: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM admins WHERE is_super_admin = FALSE")
+            .fetch_one(pool)
+            .await?;
+    if workers.0 > 0 {
+        return Ok(());
+    }
+    for (name, pwd) in WORKER_ADMINS {
+        let hash = auth::hash_password(pwd).await?;
+        sqlx::query(
+            "INSERT INTO admins (display_name, password_hash, is_super_admin) VALUES ($1, $2, FALSE)",
+        )
+        .bind(*name)
+        .bind(hash)
+        .execute(pool)
+        .await?;
+        tracing::info!("bootstrapped worker admin: {name}");
+    }
+    Ok(())
+}
+
 async fn bootstrap_admin(
     pool: &sqlx::PgPool,
     password: Option<&str>,
@@ -78,20 +107,26 @@ async fn bootstrap_admin(
             None => "admin",
         };
         let hash = auth::hash_password(pwd).await?;
-        sqlx::query("INSERT INTO admins (display_name, password_hash) VALUES ($1, $2)")
-            .bind("Admin")
-            .bind(hash)
-            .execute(pool)
-            .await?;
-        tracing::info!("bootstrapped admin user");
-    } else if let Some(pwd) = password {
-        let hash = auth::hash_password(pwd).await?;
         sqlx::query(
-            "UPDATE admins SET password_hash = $1 WHERE id = (SELECT id FROM admins ORDER BY created_at LIMIT 1)",
+            "INSERT INTO admins (display_name, password_hash, is_super_admin) VALUES ($1, $2, TRUE)",
         )
+        .bind("Главный администратор")
         .bind(hash)
         .execute(pool)
         .await?;
+        tracing::info!("bootstrapped super admin");
+        seed_worker_admins(pool).await?;
+    } else {
+        if let Some(pwd) = password {
+            let hash = auth::hash_password(pwd).await?;
+            sqlx::query(
+                "UPDATE admins SET password_hash = $1 WHERE is_super_admin = TRUE",
+            )
+            .bind(hash)
+            .execute(pool)
+            .await?;
+        }
+        seed_worker_admins(pool).await?;
     }
     Ok(())
 }
