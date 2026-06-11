@@ -159,14 +159,23 @@ export function AppHeader({
   }
 
   if (mode === "admin" && !adminAuthed) {
-    secondaryItems.push({
-      id: "back-employee",
-      label: "Сотрудник",
-      icon: ArrowLeft,
-      active: false,
-      onClick: onSwitchEmployee,
-      ghost: true,
-    });
+    secondaryItems.push(
+      {
+        id: "settings",
+        label: "Настройки",
+        icon: SettingsIcon,
+        active: settingsOpen,
+        onClick: onOpenSettings,
+      },
+      {
+        id: "back-employee",
+        label: "Сотрудник",
+        icon: ArrowLeft,
+        active: false,
+        onClick: onSwitchEmployee,
+        ghost: true,
+      },
+    );
   }
 
   if (mode === "admin" && adminAuthed) {

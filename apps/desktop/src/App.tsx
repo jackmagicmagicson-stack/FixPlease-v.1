@@ -252,7 +252,8 @@ export default function App() {
 
           {!serverOk && (
             <div className="error-banner banner-enter">
-              Не удалось подключиться к серверу. Откройте «Настройки» и проверьте адрес сервера.
+              Не удалось подключиться к серверу. Откройте «Настройки» в шапке и проверьте адрес
+              сервера.
             </div>
           )}
         </div>
@@ -262,7 +263,12 @@ export default function App() {
       <main className="app-main">
         <GlassPageTransition pageKey={pageKey}>
           {mode === "employee" && settingsOpen && (
-            <Settings isAdmin={false} onLogout={() => {}} onServerSaved={setServerOk} />
+            <Settings
+              isAdmin={false}
+              allowServerSetup={!serverOk}
+              onLogout={() => {}}
+              onServerSaved={setServerOk}
+            />
           )}
 
           {mode === "employee" && !settingsOpen && employeeTab === "create" && (
@@ -279,7 +285,16 @@ export default function App() {
             <TrackTicket onCreateTicket={() => setEmployeeTab("create")} />
           )}
 
-          {mode === "admin" && !adminAuthed && (
+          {mode === "admin" && !adminAuthed && settingsOpen && (
+            <Settings
+              isAdmin={false}
+              allowServerSetup
+              onLogout={() => {}}
+              onServerSaved={setServerOk}
+            />
+          )}
+
+          {mode === "admin" && !adminAuthed && !settingsOpen && (
             <AdminLogin
               onSuccess={() => {
                 setAdminAuthed(true);

@@ -24,6 +24,8 @@ import { checkForUpdates } from "../updater";
 
 interface Props {
   isAdmin: boolean;
+  /** Разрешить смену адреса без входа в админку (нет связи с сервером). */
+  allowServerSetup?: boolean;
   isSuperAdmin?: boolean;
   adminId?: string;
   onLogout: () => void;
@@ -32,11 +34,13 @@ interface Props {
 
 export function Settings({
   isAdmin,
+  allowServerSetup = false,
   isSuperAdmin = false,
   adminId,
   onLogout,
   onServerSaved,
 }: Props) {
+  const canEditServer = isAdmin || allowServerSetup;
   const {
     prefs,
     setTheme,
@@ -107,9 +111,9 @@ export function Settings({
     setServerError("");
 
     const normalized = normalizeServerUrl(url);
-    const serverChanged = isAdmin && normalized !== getServerUrl();
+    const serverChanged = canEditServer && normalized !== getServerUrl();
 
-    if (isAdmin && !isValidServerUrl(url)) {
+    if (canEditServer && !isValidServerUrl(url)) {
       setServerError("Укажите корректный адрес: http:// или https://");
       return;
     }
@@ -146,12 +150,16 @@ export function Settings({
       setServerUrl(normalized);
       setUrl(normalized);
       onServerSaved?.(true);
-      setMsg("Адрес сервера сохранён. Войдите в кабинет снова.");
-      onLogout();
+      if (isAdmin) {
+        setMsg("Адрес сервера сохранён. Войдите в кабинет снова.");
+        onLogout();
+      } else {
+        setMsg("Адрес сервера сохранён.");
+      }
       return;
     }
 
-    if (isAdmin) {
+    if (canEditServer) {
       setServerUrl(normalized);
     }
 
@@ -280,7 +288,9 @@ export function Settings({
         hint={
           isAdmin
             ? "После переноса или обновления сервера укажите новый адрес (например https://192.168.1.50). Доступно только администратору."
-            : "Меняйте только по указанию IT-отдела"
+            : allowServerSetup
+              ? "Сейчас нет связи с сервером — укажите адрес, который дал IT-отдел, и нажмите «Проверить подключение»."
+              : "Меняйте только по указанию IT-отдела"
         }
       >
         <div className="form-row">
@@ -292,11 +302,11 @@ export function Settings({
               setServerTestOk(null);
               setServerError("");
             }}
-            placeholder={isAdmin ? "https://192.168.1.50" : "http://127.0.0.1:8080"}
-            readOnly={!isAdmin}
-            className={!isAdmin ? "input-readonly" : undefined}
+            placeholder={canEditServer ? "https://192.168.1.50" : "http://127.0.0.1:8080"}
+            readOnly={!canEditServer}
+            className={!canEditServer ? "input-readonly" : undefined}
           />
-          {isAdmin ? (
+          {canEditServer ? (
             <div className="settings-server-actions">
               <button
                 type="button"
