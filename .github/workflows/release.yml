@@ -36,19 +36,25 @@ jobs:
       - name: Build Windows installers
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
-        run: npx tauri build --no-sign --target x86_64-pc-windows-msvc
+        run: npx tauri build --no-sign
         working-directory: apps/desktop
 
       - name: Collect installer artifacts
         shell: pwsh
         run: |
-          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE "target\release\bundle"
-          $nsis = Get-ChildItem (Join-Path $bundleRoot "nsis\*-setup.exe") -ErrorAction SilentlyContinue
-          $msi = Get-ChildItem (Join-Path $bundleRoot "msi\*.msi") -ErrorAction SilentlyContinue
-          $found = @($nsis) + @($msi)
+          $roots = @(
+            Join-Path $env:GITHUB_WORKSPACE "target\release\bundle"
+            Join-Path $env:GITHUB_WORKSPACE "target\x86_64-pc-windows-msvc\release\bundle"
+          )
+          $found = @()
+          foreach ($root in $roots) {
+            if (-not (Test-Path $root)) { continue }
+            $found += Get-ChildItem (Join-Path $root "nsis\*-setup.exe") -ErrorAction SilentlyContinue
+            $found += Get-ChildItem (Join-Path $root "msi\*.msi") -ErrorAction SilentlyContinue
+          }
           if ($found.Count -eq 0) {
-            Write-Error "No installer artifacts under $bundleRoot"
-            Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Include *.msi,*-setup.exe -ErrorAction SilentlyContinue |
+            Write-Error "No installer artifacts found under target/**/bundle"
+            Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "target") -Recurse -Include *.msi,*-setup.exe -ErrorAction SilentlyContinue |
               Select-Object -ExpandProperty FullName
             exit 1
           }
