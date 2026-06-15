@@ -37,6 +37,30 @@ jobs:
         run: npx tauri build --no-sign --target x86_64-pc-windows-msvc
         working-directory: apps/desktop
 
+      - name: Collect installer artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $patterns = @(
+            "target/release/bundle/nsis/*-setup.exe",
+            "target/release/bundle/msi/*.msi",
+            "apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe",
+            "apps/desktop/src-tauri/target/release/bundle/msi/*.msi"
+          )
+          $found = @()
+          foreach ($pattern in $patterns) {
+            $found += Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
+          }
+          if ($found.Count -eq 0) {
+            Write-Error "No installer artifacts found under target/**/bundle"
+            Get-ChildItem -Recurse -Include *.msi,*-setup.exe -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
+          }
+          $found | ForEach-Object {
+            Copy-Item $_.FullName release-assets/
+            Write-Host "Asset:" $_.FullName
+          }
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -50,6 +74,4 @@ jobs:
             1. Скачайте **`*-setup.exe`** (NSIS) — рекомендуется: автоматически ставит корневой CA.
             2. Альтернатива: `.msi`.
             3. В **Настройках** укажите адрес сервера, например `https://192.168.0.173:8443`.
-          files: |
-            target/release/bundle/nsis/*-setup.exe
-            target/release/bundle/msi/*.msi
+          files: release-assets/*
