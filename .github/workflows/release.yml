@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to publish (must already exist on origin)"
+        required: true
+        default: "v2.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: npm ci
+        working-directory: apps/desktop
+
+      - run: npm run build
+        working-directory: apps/desktop
+
+      - name: Build Windows installers
+        run: npx tauri build --no-sign --target x86_64-pc-windows-msvc
+        working-directory: apps/desktop
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: FixPlease ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          body: |
+            Windows-установщик FixPlease.
+
+            1. Скачайте **`*-setup.exe`** (NSIS) — рекомендуется: автоматически ставит корневой CA.
+            2. Альтернатива: `.msi`.
+            3. В **Настройках** укажите адрес сервера, например `https://192.168.0.173:8443`.
+          files: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/msi/*.msi

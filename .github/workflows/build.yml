@@ -70,9 +70,6 @@ jobs:
         with:
           node-version: "20"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Generate updater signing key (CI)
-        run: npx tauri signer generate --ci -p "" -w fixplease-ci.key -f
-        working-directory: apps/desktop
       - run: npm ci
         working-directory: apps/desktop
       - run: npm run build
@@ -81,23 +78,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: npm run tauri build -- --target x86_64-pc-windows-msvc
         working-directory: apps/desktop
-      - name: Build and publish release
+      - name: Build Windows installer (push to main)
         if: github.event_name == 'push'
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          projectPath: apps/desktop
-          tagName: app-v__VERSION__
-          releaseName: FixPlease v__VERSION__
-          releaseBody: |
-            Windows-установщик FixPlease.
-
-            1. Скачайте `.msi` или `.exe` (NSIS) из assets ниже.
-            2. Установите на рабочие места.
-            3. В **Настройках** (кабинет администратора) укажите адрес сервера: `https://<IP-сервера-в-LAN>`.
-          releaseDraft: true
-          prerelease: false
-          args: --target x86_64-pc-windows-msvc
+        run: npx tauri build --no-sign --target x86_64-pc-windows-msvc
+        working-directory: apps/desktop
