@@ -8,7 +8,7 @@ on:
       tag:
         description: "Git tag to publish (must already exist on origin)"
         required: true
-        default: "v2.0.0"
+        default: "v2.0.2"
 
 permissions:
   contents: write
@@ -33,10 +33,12 @@ jobs:
       - run: npm run build
         working-directory: apps/desktop
 
-      - name: Build Windows installers
+      - name: Build signed Windows installers
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target
-        run: npx tauri build --no-sign
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build
         working-directory: apps/desktop
 
       - name: Collect installer artifacts
@@ -50,11 +52,13 @@ jobs:
           foreach ($root in $roots) {
             if (-not (Test-Path $root)) { continue }
             $found += Get-ChildItem (Join-Path $root "nsis\*-setup.exe") -ErrorAction SilentlyContinue
+            $found += Get-ChildItem (Join-Path $root "nsis\*-setup.exe.sig") -ErrorAction SilentlyContinue
             $found += Get-ChildItem (Join-Path $root "msi\*.msi") -ErrorAction SilentlyContinue
+            $found += Get-ChildItem (Join-Path $root "msi\*.msi.sig") -ErrorAction SilentlyContinue
           }
           if ($found.Count -eq 0) {
             Write-Error "No installer artifacts found under target/**/bundle"
-            Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "target") -Recurse -Include *.msi,*-setup.exe -ErrorAction SilentlyContinue |
+            Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE "target") -Recurse -Include *.msi,*.msi.sig,*-setup.exe,*-setup.exe.sig -ErrorAction SilentlyContinue |
               Select-Object -ExpandProperty FullName
             exit 1
           }
@@ -77,4 +81,5 @@ jobs:
             1. Скачайте **`*-setup.exe`** (NSIS) — рекомендуется: автоматически ставит корневой CA.
             2. Альтернатива: `.msi`.
             3. В **Настройках** укажите адрес сервера, например `https://192.168.0.173:8443`.
+            4. Для автообновления: в админ-настройках укажите версию, URL `*-setup.exe` и содержимое `.sig`.
           files: release-assets/*

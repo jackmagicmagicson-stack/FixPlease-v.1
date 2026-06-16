@@ -10,6 +10,7 @@ import { Toast, type ToastData } from "./components/Toast";
 import { WelcomeOnboarding } from "./components/WelcomeOnboarding";
 import { WindowTitleBar } from "./components/WindowTitleBar";
 import { isOnboardingDone } from "./onboardingState";
+import { syncAutostartFromPref } from "./autostart";
 import { notifyWsEvent } from "./notify";
 import { subscribe } from "./ws";
 import { CreateTicket } from "./pages/CreateTicket";
@@ -46,6 +47,10 @@ export default function App() {
   const { prefs } = useInterfacePrefs();
   const { activeTicket, unreadCount, refresh: refreshEmployeeStatus } = useEmployeeStatus();
   const employeeUx = prefs.employeeUxEnhanced;
+
+  useEffect(() => {
+    void syncAutostartFromPref();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

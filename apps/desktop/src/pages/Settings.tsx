@@ -21,6 +21,12 @@ import { AboutProgram } from "../components/AboutProgram";
 import { AdminManagement } from "../components/AdminManagement";
 import { resetOnboarding } from "../onboardingState";
 import { checkForUpdates } from "../updater";
+import {
+  applyAutostart,
+  getAutostartPref,
+  readAutostartEnabled,
+  setAutostartPref,
+} from "../autostart";
 
 interface Props {
   isAdmin: boolean;
@@ -65,6 +71,11 @@ export function Settings({
   const [msg, setMsg] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [autostart, setAutostart] = useState(() => getAutostartPref());
+
+  useEffect(() => {
+    void readAutostartEnabled().then(setAutostart).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setUrl(getServerUrl());
@@ -121,6 +132,16 @@ export function Settings({
     saveLastLocation(row, desk);
     localStorage.setItem("quiet_start", quietStart);
     localStorage.setItem("quiet_end", quietEnd);
+    setAutostartPref(autostart);
+    try {
+      await applyAutostart(autostart);
+    } catch (e) {
+      setServerError(
+        e instanceof Error ? e.message : "Не удалось изменить автозапуск Windows",
+      );
+      onServerSaved?.(false);
+      return;
+    }
 
     if (isAdmin) {
       try {
@@ -373,6 +394,20 @@ export function Settings({
             <input type="time" value={quietEnd} onChange={(e) => setQuietEnd(e.target.value)} />
           </div>
         </div>
+      </FormSection>
+
+      <FormSection
+        title="Запуск"
+        hint="FixPlease может стартовать вместе с Windows и оставаться в трее"
+      >
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={autostart}
+            onChange={(e) => setAutostart(e.target.checked)}
+          />
+          Запускать FixPlease при входе в Windows
+        </label>
       </FormSection>
 
       <FormSection title="Обновления приложения">

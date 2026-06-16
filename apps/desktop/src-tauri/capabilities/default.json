@@ -17,6 +17,7 @@
     "notification:default",
     "websocket:default",
     "updater:default",
+    "autostart:default",
     "dialog:default",
     "fs:default",
     {
