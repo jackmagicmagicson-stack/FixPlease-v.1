@@ -19,6 +19,7 @@ tauri-plugin-http = { version = "2", features = ["dangerous-settings"] }
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-websocket = { version = "2", features = ["native-tls"] }
 native-tls = "0.2"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "native-tls"] }

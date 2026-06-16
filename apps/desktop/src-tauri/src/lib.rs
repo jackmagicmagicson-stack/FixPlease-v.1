@@ -104,7 +104,16 @@ fn ensure_lan_no_proxy() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     ensure_lan_no_proxy();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main_window(app);
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
         .plugin(websocket_plugin())

@@ -1227,7 +1227,7 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "fixplease-api"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1253,7 +1253,7 @@ dependencies = [
 
 [[package]]
 name = "fixplease-desktop"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "native-tls",
  "serde",
@@ -1264,6 +1264,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-http",
  "tauri-plugin-notification",
+ "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tauri-plugin-websocket",
  "tokio-tungstenite 0.28.0",
@@ -5041,6 +5042,21 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-single-instance"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c8f29386f5e9fdc699182388a33ee80a56de436d91b67459e86afef426282af"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.18",
+ "tracing",
+ "windows-sys 0.60.2",
+ "zbus",
 ]
 
 [[package]]
