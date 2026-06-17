@@ -12,6 +12,7 @@ import { getLastReadAt, markTicketRead } from "../messageReadState";
 import {
   getActiveHistoryEntries,
   historyEntryToTicket,
+  isKnownTicket,
   upsertTicketHistory,
 } from "../ticketHistory";
 import { subscribe } from "../ws";
@@ -76,11 +77,15 @@ export function EmployeeStatusProvider({ children }: { children: ReactNode }) {
     const onPoll = () => refresh();
     window.addEventListener("fixplease-ws-poll", onPoll);
     const unsub = subscribe((ev) => {
-      if (
-        ev.type === "ticket_updated" ||
-        ev.type === "message_created" ||
-        ev.type === "ticket_created"
-      ) {
+      if (ev.type === "ticket_created") {
+        if (isKnownTicket(ev.ticket.id)) refresh();
+        return;
+      }
+      if (ev.type === "ticket_updated") {
+        if (isKnownTicket(ev.ticket.id)) refresh();
+        return;
+      }
+      if (ev.type === "message_created" && isKnownTicket(ev.message.ticket_id)) {
         refresh();
       }
     });

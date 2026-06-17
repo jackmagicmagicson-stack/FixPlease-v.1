@@ -5,7 +5,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import notificationSound from "./assets/sounds/tethys.mp3";
 import { ticketStatusLabel } from "./statusLabels";
-import { upsertTicketHistory } from "./ticketHistory";
+import { isKnownTicket, upsertTicketHistory } from "./ticketHistory";
 import type { WsEvent, Ticket } from "./types";
 
 let sound: HTMLAudioElement | null = null;
@@ -71,6 +71,7 @@ export async function notifyWsEvent(event: WsEvent, isAdmin: boolean) {
       break;
     case "ticket_updated":
       if (!isAdmin) {
+        if (!isKnownTicket(event.ticket.id)) break;
         await notify(
           `Заявка #${event.ticket.public_number}`,
           `Статус: ${ticketStatusLabel(event.ticket)}`,

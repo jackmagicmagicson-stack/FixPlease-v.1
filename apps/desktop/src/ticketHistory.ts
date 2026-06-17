@@ -60,6 +60,11 @@ export function getClosedHistoryEntries(): TicketHistoryEntry[] {
   return getTicketHistory().filter((e) => e.status === "closed");
 }
 
+/** Заявка создана или отслеживается на этом компьютере. */
+export function isKnownTicket(ticketId: string): boolean {
+  return getTicketHistory().some((e) => e.id === ticketId);
+}
+
 /** Минимальный Ticket из локальной истории — для офлайн-отображения при сбое сети. */
 export function historyEntryToTicket(entry: TicketHistoryEntry): Ticket {
   return {
