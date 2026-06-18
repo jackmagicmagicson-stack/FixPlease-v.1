@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "../api";
+import { isAppVisible } from "../appVisibility";
 import { getLastReadAt, markTicketRead } from "../messageReadState";
 import {
   getActiveHistoryEntries,
@@ -74,7 +75,10 @@ export function EmployeeStatusProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
-    const onPoll = () => refresh();
+    const onPoll = () => {
+      if (!isAppVisible()) return;
+      refresh();
+    };
     window.addEventListener("fixplease-ws-poll", onPoll);
     const unsub = subscribe((ev) => {
       if (ev.type === "ticket_created") {

@@ -1,4 +1,5 @@
 import TauriWebSocket from "@tauri-apps/plugin-websocket";
+import { isAppVisible, onAppVisibilityChange } from "./appVisibility";
 import type { WsEvent } from "./types";
 import { wsUrl } from "./api";
 
@@ -11,6 +12,7 @@ let tauriSocket: TauriWebSocket | null = null;
 let browserSocket: WebSocket | null = null;
 let connectInFlight: Promise<void> | null = null;
 let connected = false;
+let paused = !isAppVisible();
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -29,7 +31,7 @@ function updatePollFallback() {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  if (handlers.length > 0 && !connected) {
+  if (handlers.length > 0 && !connected && !paused) {
     pollTimer = setInterval(dispatchPoll, 5000);
   }
 }
@@ -40,6 +42,7 @@ function setConnected(next: boolean) {
 }
 
 function scheduleReconnect() {
+  if (paused) return;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = setTimeout(() => {
     connectInFlight = null;
@@ -92,7 +95,7 @@ function connectBrowser() {
 }
 
 async function ensureConnected() {
-  if (connected) return;
+  if (paused || connected) return;
   if (connectInFlight) {
     await connectInFlight;
     return;
@@ -118,6 +121,20 @@ async function ensureConnected() {
 if (typeof window !== "undefined") {
   window.addEventListener("fixplease-server-url-changed", () => {
     disconnectWs();
+    if (handlers.length > 0 && !paused) {
+      void ensureConnected();
+    }
+  });
+
+  onAppVisibilityChange((visible) => {
+    paused = !visible;
+    if (paused) {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+      teardownSockets();
+      updatePollFallback();
+      return;
+    }
     if (handlers.length > 0) {
       void ensureConnected();
     }
@@ -126,7 +143,9 @@ if (typeof window !== "undefined") {
 
 export function subscribe(handler: Handler) {
   handlers.push(handler);
-  void ensureConnected();
+  if (!paused) {
+    void ensureConnected();
+  }
   return () => {
     handlers = handlers.filter((h) => h !== handler);
     updatePollFallback();

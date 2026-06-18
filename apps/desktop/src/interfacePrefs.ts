@@ -6,7 +6,8 @@ export interface InterfacePrefs {
   theme: ThemeMode;
   fontSize: FontSize;
   blockSize: BlockSize;
-  animationsEnabled: boolean;
+  /** Меньше анимаций, blur и фоновой отрисовки — для слабых ПК. */
+  performanceMode: boolean;
   /** Новый UX сотрудника — можно отключить для отката к классике */
   employeeUxEnhanced: boolean;
 }
@@ -17,15 +18,25 @@ const DEFAULTS: InterfacePrefs = {
   theme: "light",
   fontSize: "medium",
   blockSize: "comfortable",
-  animationsEnabled: true,
+  performanceMode: true,
   employeeUxEnhanced: true,
 };
+
+function readPerformanceMode(parsed: Partial<InterfacePrefs> & { animationsEnabled?: boolean }): boolean {
+  if (typeof parsed.performanceMode === "boolean") {
+    return parsed.performanceMode;
+  }
+  if (typeof parsed.animationsEnabled === "boolean") {
+    return !parsed.animationsEnabled;
+  }
+  return DEFAULTS.performanceMode;
+}
 
 export function loadInterfacePrefs(): InterfacePrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
-    const parsed = JSON.parse(raw) as Partial<InterfacePrefs>;
+    const parsed = JSON.parse(raw) as Partial<InterfacePrefs> & { animationsEnabled?: boolean };
     return {
       theme: parsed.theme === "dark" ? "dark" : "light",
       fontSize:
@@ -36,7 +47,7 @@ export function loadInterfacePrefs(): InterfacePrefs {
         parsed.blockSize === "compact" || parsed.blockSize === "spacious"
           ? parsed.blockSize
           : "comfortable",
-      animationsEnabled: parsed.animationsEnabled !== false,
+      performanceMode: readPerformanceMode(parsed),
       employeeUxEnhanced: parsed.employeeUxEnhanced !== false,
     };
   } catch {
@@ -53,6 +64,7 @@ export function applyInterfacePrefs(prefs: InterfacePrefs) {
   root.dataset.theme = prefs.theme;
   root.dataset.fontSize = prefs.fontSize;
   root.dataset.blockSize = prefs.blockSize;
-  root.dataset.animations = prefs.animationsEnabled ? "on" : "off";
+  root.dataset.performance = prefs.performanceMode ? "on" : "off";
+  root.dataset.animations = prefs.performanceMode ? "off" : "on";
   root.dataset.employeeUx = prefs.employeeUxEnhanced ? "enhanced" : "classic";
 }

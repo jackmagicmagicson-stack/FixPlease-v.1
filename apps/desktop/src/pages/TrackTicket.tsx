@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Archive, ClipboardList, Loader2, PlusCircle } from "lucide-react";
 import { api } from "../api";
+import { isAppVisible } from "../appVisibility";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { EmptyState } from "../components/EmptyState";
 import { useEmployeeStatus } from "../components/EmployeeStatusProvider";
@@ -115,6 +116,7 @@ export function TrackTicket({ onCreateTicket }: Props) {
 
   useEffect(() => {
     const onPoll = () => {
+      if (!isAppVisible()) return;
       if (tab === "active") {
         const active = getActiveHistoryEntries();
         if (active.length > 0) {

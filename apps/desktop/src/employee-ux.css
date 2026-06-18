@@ -362,3 +362,10 @@
   justify-content: center;
   margin: 0;
 }
+
+html[data-performance="on"] .onboarding-overlay,
+html[data-performance="on"] .employee-status-chip,
+html[data-performance="on"] .sticky-action-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

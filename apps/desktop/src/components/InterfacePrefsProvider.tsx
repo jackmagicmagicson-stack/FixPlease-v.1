@@ -14,7 +14,7 @@ interface InterfacePrefsContextValue {
   setTheme: (theme: ThemeMode) => void;
   setFontSize: (fontSize: FontSize) => void;
   setBlockSize: (blockSize: BlockSize) => void;
-  setAnimationsEnabled: (enabled: boolean) => void;
+  setPerformanceMode: (enabled: boolean) => void;
   setEmployeeUxEnhanced: (enabled: boolean) => void;
   updatePrefs: (patch: Partial<InterfacePrefs>) => void;
 }
@@ -45,8 +45,8 @@ export function InterfacePrefsProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
-  const setAnimationsEnabled = useCallback(
-    (animationsEnabled: boolean) => commit((p) => ({ ...p, animationsEnabled })),
+  const setPerformanceMode = useCallback(
+    (performanceMode: boolean) => commit((p) => ({ ...p, performanceMode })),
     [commit],
   );
 
@@ -66,7 +66,7 @@ export function InterfacePrefsProvider({ children }: { children: ReactNode }) {
       setTheme,
       setFontSize,
       setBlockSize,
-      setAnimationsEnabled,
+      setPerformanceMode,
       setEmployeeUxEnhanced,
       updatePrefs,
     }),
@@ -75,7 +75,7 @@ export function InterfacePrefsProvider({ children }: { children: ReactNode }) {
       setTheme,
       setFontSize,
       setBlockSize,
-      setAnimationsEnabled,
+      setPerformanceMode,
       setEmployeeUxEnhanced,
       updatePrefs,
     ],

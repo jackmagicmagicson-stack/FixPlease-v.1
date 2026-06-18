@@ -402,6 +402,37 @@ a:hover {
   animation: spin 1s linear infinite;
 }
 
+/* Режим производительности: меньше CPU на слабых ПК */
+html[data-performance="on"] {
+  --glass-blur: 0px;
+  --glass-blur-hover: 0px;
+}
+
+html[data-performance="on"] *,
+html[data-performance="on"] *::before,
+html[data-performance="on"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+html[data-performance="on"] body::before,
+html[data-performance="on"] body::after {
+  animation: none;
+  opacity: 0.35;
+}
+
+html[data-performance="on"] .liquid-glass,
+html[data-performance="on"] .card,
+html[data-performance="on"] .stat-box,
+html[data-performance="on"] .glass-panel,
+html[data-performance="on"] .window-title-bar,
+html[data-performance="on"] .toast,
+html[data-performance="on"] .login-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:not([data-animations="on"]) *,
   html:not([data-animations="on"]) *::before,

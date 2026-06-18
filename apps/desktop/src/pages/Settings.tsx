@@ -52,7 +52,7 @@ export function Settings({
     setTheme,
     setFontSize,
     setBlockSize,
-    setAnimationsEnabled,
+    setPerformanceMode,
     setEmployeeUxEnhanced,
   } = useInterfacePrefs();
   const [url, setUrl] = useState(getServerUrl());
@@ -262,17 +262,21 @@ export function Settings({
           />
         </div>
         <div className="form-row">
-          <label>Анимация переходов</label>
+          <label>Режим производительности</label>
           <SegmentedControl
-            ariaLabel="Анимация переходов"
-            value={prefs.animationsEnabled ? "on" : "off"}
-            onChange={(v) => setAnimationsEnabled(v === "on")}
+            ariaLabel="Режим производительности"
+            value={prefs.performanceMode ? "on" : "off"}
+            onChange={(v) => setPerformanceMode(v === "on")}
             options={[
-              { value: "on", label: "Включена" },
-              { value: "off", label: "Выключена" },
+              { value: "on", label: "Включён" },
+              { value: "off", label: "Выключен" },
             ]}
           />
         </div>
+        <p className="hint">
+          Рекомендуется для слабых ПК: отключает анимации, эффект стекла и размытие — меньше
+          нагрузка на процессор. При скрытии в трей фоновая активность снижается.
+        </p>
         <div className="form-row">
           <label>Интерфейс сотрудника</label>
           <SegmentedControl

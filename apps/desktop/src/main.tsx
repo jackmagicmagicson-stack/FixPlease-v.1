@@ -6,6 +6,7 @@ import { InterfacePrefsProvider } from "./components/InterfacePrefsProvider";
 import { LiquidGlassProvider } from "./components/LiquidGlassProvider";
 import { applyInterfacePrefs, loadInterfacePrefs } from "./interfacePrefs";
 import { ensureServerUrlConfigured } from "./api";
+import "./appVisibility";
 import { warmUpNotificationSound } from "./notify";
 import "./employee-ux.css";
 import "./styles.css";

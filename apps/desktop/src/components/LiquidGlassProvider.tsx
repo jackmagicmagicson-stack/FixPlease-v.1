@@ -1,4 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { isAppVisible, onAppVisibilityChange } from "../appVisibility";
+import { useInterfacePrefs } from "./InterfacePrefsProvider";
 
 const GLASS_SELECTOR = ".card, .stat-box, .liquid-glass, .glass-panel";
 
@@ -14,13 +16,19 @@ function lerpAngle(current: number, target: number, t: number): number {
 }
 
 export function LiquidGlassProvider({ children }: { children: ReactNode }) {
+  const { prefs } = useInterfacePrefs();
   const rafRef = useRef(0);
   const cursorRef = useRef({ x: 0, y: 0 });
   const lightRef = useRef({ angle: 0, intensity: 0.5 });
   const activeRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (prefs.performanceMode) return;
+
+    let running = isAppVisible();
+
     const tick = () => {
+      if (!running) return;
       const active = activeRef.current;
       if (active) {
         const w = active.clientWidth || 1;
@@ -45,9 +53,24 @@ export function LiquidGlassProvider({ children }: { children: ReactNode }) {
       }
       rafRef.current = requestAnimationFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
+
+    const startLoop = () => {
+      if (!running) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    const stopLoop = () => {
+      running = false;
+      cancelAnimationFrame(rafRef.current);
+      if (activeRef.current) {
+        activeRef.current.removeAttribute("data-lens-active");
+        activeRef.current = null;
+      }
+    };
 
     const setActive = (el: HTMLElement | null) => {
+      if (!running) return;
       if (activeRef.current === el) return;
       if (activeRef.current) {
         activeRef.current.removeAttribute("data-lens-active");
@@ -90,6 +113,7 @@ export function LiquidGlassProvider({ children }: { children: ReactNode }) {
     };
 
     const onMove = (e: MouseEvent) => {
+      if (!running) return;
       const el = findGlassAt(e.clientX, e.clientY);
       setActive(el);
       if (el) {
@@ -99,15 +123,30 @@ export function LiquidGlassProvider({ children }: { children: ReactNode }) {
 
     const onLeave = () => setActive(null);
 
+    const resume = () => {
+      running = true;
+      startLoop();
+    };
+
+    if (isAppVisible()) {
+      resume();
+    }
+
+    const unsubVisibility = onAppVisibilityChange((visible) => {
+      if (visible) resume();
+      else stopLoop();
+    });
+
     document.addEventListener("mousemove", onMove, { passive: true });
     document.addEventListener("mouseleave", onLeave);
+
     return () => {
+      unsubVisibility();
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseleave", onLeave);
-      cancelAnimationFrame(rafRef.current);
-      setActive(null);
+      stopLoop();
     };
-  }, []);
+  }, [prefs.performanceMode]);
 
   return <>{children}</>;
 }

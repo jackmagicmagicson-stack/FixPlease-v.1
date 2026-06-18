@@ -12,7 +12,7 @@ export function GlassPageTransition({ pageKey, children }: Props) {
   return (
     <div
       key={pageKey}
-      className={`page-view${prefs.animationsEnabled ? " page-fade-enter" : ""}`}
+      className={`page-view${!prefs.performanceMode ? " page-fade-enter" : ""}`}
       data-page-key={pageKey}
     >
       {children}
