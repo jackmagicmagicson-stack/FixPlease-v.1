@@ -28,6 +28,7 @@ async fn check_and_install_update(app: AppHandle, server_url: String) -> Result<
 
     let update = app
         .updater_builder()
+        .no_proxy()
         .endpoints(vec![endpoint])
         .map_err(|e| e.to_string())?
         .build()
