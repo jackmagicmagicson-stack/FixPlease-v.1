@@ -5,6 +5,7 @@ import { EmployeeStatusProvider } from "./components/EmployeeStatusProvider";
 import { InterfacePrefsProvider } from "./components/InterfacePrefsProvider";
 import { LiquidGlassProvider } from "./components/LiquidGlassProvider";
 import { applyInterfacePrefs, loadInterfacePrefs } from "./interfacePrefs";
+import { ensureServerUrlConfigured } from "./api";
 import { warmUpNotificationSound } from "./notify";
 import "./employee-ux.css";
 import "./styles.css";
@@ -18,14 +19,16 @@ function unlockNotificationSound() {
 
 window.addEventListener("pointerdown", unlockNotificationSound, { once: true });
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <InterfacePrefsProvider>
-      <EmployeeStatusProvider>
-        <LiquidGlassProvider>
-          <App />
-        </LiquidGlassProvider>
-      </EmployeeStatusProvider>
-    </InterfacePrefsProvider>
-  </React.StrictMode>,
-);
+void ensureServerUrlConfigured().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <InterfacePrefsProvider>
+        <EmployeeStatusProvider>
+          <LiquidGlassProvider>
+            <App />
+          </LiquidGlassProvider>
+        </EmployeeStatusProvider>
+      </InterfacePrefsProvider>
+    </React.StrictMode>,
+  );
+});

@@ -1,4 +1,5 @@
 import { setAdminProfile } from "./adminSession";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   AdminUser,
   Attachment,
@@ -11,12 +12,17 @@ import type {
 import { appFetch } from "./httpFetch";
 import { disconnectWs } from "./ws";
 
-const DEFAULT_SERVER_URL = "http://127.0.0.1:8080";
+const DEV_SERVER_URL = "http://127.0.0.1:8080";
+const FALLBACK_SERVER_URL = "https://192.168.0.173:8443";
+
+function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 function readServerUrl(): string {
   const stored = localStorage.getItem("server_url");
   if (!stored || stored === "https://localhost") {
-    return DEFAULT_SERVER_URL;
+    return import.meta.env.DEV ? DEV_SERVER_URL : FALLBACK_SERVER_URL;
   }
   return stored;
 }
@@ -61,6 +67,25 @@ export function setServerUrl(url: string) {
 
 export function getServerUrl() {
   return baseUrl;
+}
+
+/** При первом запуске подставляет адрес сервера из файла в установщике. */
+export async function ensureServerUrlConfigured(): Promise<void> {
+  if (localStorage.getItem("server_url")) return;
+
+  let url = import.meta.env.DEV ? DEV_SERVER_URL : FALLBACK_SERVER_URL;
+  if (!import.meta.env.DEV && isTauri()) {
+    try {
+      const bundled = await invoke<string | null>("get_bundled_server_url");
+      if (bundled?.trim()) {
+        url = bundled.trim();
+      }
+    } catch {
+      /* bundled resource missing — use fallback */
+    }
+  }
+
+  setServerUrl(url);
 }
 
 export function setAdminToken(token: string | null) {

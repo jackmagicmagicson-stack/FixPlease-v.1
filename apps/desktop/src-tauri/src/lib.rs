@@ -19,6 +19,21 @@ fn websocket_plugin() -> impl tauri::plugin::Plugin<tauri::Wry> {
 }
 
 #[tauri::command]
+fn get_bundled_server_url(app: AppHandle) -> Option<String> {
+    let Ok(res_dir) = app.path().resource_dir() else {
+        return None;
+    };
+    let path = res_dir.join("config").join("default-server-url.txt");
+    let content = std::fs::read_to_string(path).ok()?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+#[tauri::command]
 async fn check_and_install_update(app: AppHandle, server_url: String) -> Result<String, String> {
     let base = server_url.trim_end_matches('/');
     let endpoint = Url::parse(&format!(
@@ -169,7 +184,10 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![check_and_install_update])
+        .invoke_handler(tauri::generate_handler![
+            check_and_install_update,
+            get_bundled_server_url
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
